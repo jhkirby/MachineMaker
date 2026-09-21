@@ -1,0 +1,81 @@
+/* -----------------------------------------------------------------------------
+ * Project:       RTL Schematic
+ * Owner:         Joshua H. Kirby
+ * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+ * Last Modified: 2026-09-02
+ * --------------------------------------------------------------------------- */
+
+:root {
+  /* Surfaces — darkest (canvas) to lightest (raised panels). */
+  --surface-canvas: #14161b;
+  --surface-base: #1e1f22;
+  --surface-panel: #26282d;
+  --surface-raised: #303339;
+  --surface-hover: #3b3f47;
+  --surface-input: #191b1f;
+
+  /* Lines and text. */
+  --border-subtle: #34373d;
+  --border-strong: #454951;
+  --text-primary: #e8ecf4;
+  --text-secondary: #a7adba;
+  --text-muted: #767c88;
+
+  /* Accents. */
+  --accent: #4c9ffe;
+  --accent-hover: #6fb2ff;
+  --danger: #e0655f;
+
+  /* A flat light grey for icon buttons, menu triggers, and palette cards to
+     highlight to on hover (unlike --surface-hover, which is a per-theme
+     elevation tint) so hover always reads as an unmistakable "light grey",
+     not just a shade darker or lighter than whatever the surface already
+     was. This dark-mode value is a touch darker than light mode's (below) —
+     against this theme's much darker surfaces, the same light-mode grey
+     read as too bright/washed-out by comparison. */
+  --hover-highlight: #a8aeb9;
+
+  /* Spacing scale. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* Structure. */
+  --radius: 6px;
+  --toolbar-height: 48px;
+  --sidebar-width: 232px;
+  --sidebar-rail-width: 40px;
+  --inspector-width: 300px;
+  --font-ui: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+
+/* Light theme — same token names as :root above, so every rule elsewhere
+   that already reads a surface, text, border, or accent token repaints for
+   free; only the handful of places with a color hardcoded outside these
+   tokens (see colorMode on the canvas's ReactFlow element, and its PNG and
+   minimap backgrounds) need their own theme-aware branch. Toggled by
+   setting data-theme="light" on the document root (see the toolbar's
+   day-night button, App.tsx). */
+:root[data-theme="light"] {
+  --surface-canvas: #e8eaef;
+  --surface-base: #eef0f4;
+  --surface-panel: #f8f9fb;
+  --surface-raised: #ffffff;
+  --surface-hover: #e3e6ed;
+  --surface-input: #ffffff;
+
+  --border-subtle: #dde1e8;
+  --border-strong: #c2c8d3;
+  --text-primary: #1d2129;
+  --text-secondary: #565e6c;
+  --text-muted: #7c8493;
+
+  --accent: #2f6fe0;
+  --accent-hover: #1f5bc4;
+  --danger: #c8433c;
+
+  --hover-highlight: #cbd0d9;
+}

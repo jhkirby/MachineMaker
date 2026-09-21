@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Project:       RTL Schematic
+  Owner:         Joshua H. Kirby
+  Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+  Last Modified: 2026-09-21
+
+  App icon/logo. Scales up the "module" component glyph (ComponentIcon.tsx:
+  a chip body with two pins on each side) to a full icon canvas, on the same
+  navy/blue block palette used on the canvas (block-appearance.ts), so the
+  app icon reads as "the app that draws these."
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1c2742" />
+      <stop offset="1" stop-color="#2b3d68" />
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)" stroke="#5b8def" stroke-width="6" />
+  <rect x="64" y="64" width="128" height="128" rx="18" fill="#3a5fc4" stroke="#eaf1ff" stroke-width="14" />
+  <path
+    d="M16 96h48M16 160h48M192 96h48M192 160h48"
+    fill="none"
+    stroke="#eaf1ff"
+    stroke-width="14"
+    stroke-linecap="round"
+  />
+</svg>

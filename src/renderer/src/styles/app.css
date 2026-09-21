@@ -1,0 +1,897 @@
+/* -----------------------------------------------------------------------------
+ * Project:       RTL Schematic
+ * Owner:         Joshua H. Kirby
+ * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+ * Last Modified: 2026-09-04
+ * --------------------------------------------------------------------------- */
+
+@import "./tokens.css";
+
+/* ── RESET / BASE ─────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--surface-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+input,
+select {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-2);
+  width: 100%;
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Flagged by NameInput / NumericField while the current text breaks the rules. */
+input.is-invalid,
+input.is-invalid:focus {
+  border-color: var(--danger);
+}
+
+/* ── APP LAYOUT ───────────────────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app__body {
+  /* Each panel's track width lives in its own custom property so the palette
+     and inspector can collapse independently without a combinatorial rule for
+     every state pairing. Transitioning the shorthand animates both at once. */
+  --palette-col: var(--sidebar-width);
+  --inspector-col: 0px;
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--palette-col) 1fr var(--inspector-col);
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns 220ms ease;
+}
+
+.app__body--palette-collapsed {
+  --palette-col: var(--sidebar-rail-width);
+}
+
+.app__body--inspector-open {
+  --inspector-col: var(--inspector-width);
+}
+
+/* ── TOOLBAR ──────────────────────────────────────────────────────────────── */
+
+.toolbar {
+  height: var(--toolbar-height);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.toolbar__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Inline title box: reads as plain text until the pointer or focus lands on it,
+   so the toolbar stays calm but the field is still discoverably editable. */
+.toolbar__doc-input {
+  width: auto;
+  min-width: 12ch;
+  padding: 2px var(--space-1);
+  color: var(--text-secondary);
+  background: transparent;
+  border-color: transparent;
+}
+
+.toolbar__doc-input:hover {
+  border-color: var(--border-strong);
+}
+
+.toolbar__doc-input:focus {
+  color: var(--text-primary);
+  background: var(--surface-input);
+}
+
+.toolbar__dirty {
+  color: var(--accent);
+}
+
+.toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.toolbar__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-strong);
+  margin: 0 var(--space-1);
+}
+
+/* Round icon button — the day/night theme toggle and the undo/redo arrows,
+   sized to match the canvas's own zoom/fit/lock controls
+   (.react-flow__controls-button) so every "circular icon action" in the app
+   reads as one family. */
+.toolbar__icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-primary);
+}
+
+.toolbar__icon-button:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
+/* ── TOOLBAR MENU (File / Export dropdowns) ──────────────────────────────── */
+
+.toolbar-menu {
+  position: relative;
+}
+
+.toolbar-menu__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.toolbar-menu__trigger:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
+.toolbar-menu__chevron {
+  transition: transform 100ms ease;
+}
+
+.toolbar-menu__panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  width: max-content;
+  padding: var(--space-1);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.toolbar-menu__item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+}
+
+.toolbar-menu__item:hover:not(:disabled) {
+  background: var(--hover-highlight);
+}
+
+/* ── COMPONENT PALETTE ────────────────────────────────────────────────────── */
+
+.palette {
+  background: var(--surface-panel);
+  border-right: 1px solid var(--border-subtle);
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.palette--collapsed {
+  padding: var(--space-2) 0;
+  overflow: hidden;
+}
+
+.palette__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.palette--collapsed .palette__header {
+  justify-content: center;
+  margin-bottom: 0;
+}
+
+.palette__heading,
+.inspector__heading {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.inspector__heading {
+  margin-bottom: var(--space-2);
+}
+
+/* Square icon button so the collapse control reads the same in both states.
+   Flex-centered rather than relying on the plain button's default text
+   layout, which left the «/» glyph sitting small and off-center in the
+   square instead of centered on both axes. */
+.palette__toggle {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+}
+
+.palette__toggle-icon {
+  display: block;
+}
+
+.palette__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The item sits slightly raised and lifts a touch on hover so it reads as
+   something you pick up and drag onto the canvas. */
+.palette__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  padding: var(--space-2) var(--space-3);
+  cursor: grab;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+.palette__item:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+  transform: translateX(3px);
+}
+
+.palette__item:active {
+  cursor: grabbing;
+  transform: translateX(1px);
+}
+
+.palette__icon-slot {
+  display: flex;
+  flex-shrink: 0;
+}
+
+/* ── CANVAS ───────────────────────────────────────────────────────────────── */
+
+.canvas {
+  position: relative;
+  min-width: 0;
+  background: var(--surface-canvas);
+}
+
+.canvas .react-flow__attribution {
+  display: none;
+}
+
+/* Orthogonal wires: mitre the grid corners and the hop arcs cleanly. */
+.canvas .react-flow__edge-path {
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* Lighter blue on hover so an unselected wire still responds to the pointer.
+   React Flow layers an invisible, wider hit-testing path over the visible one
+   for easier clicking, so a plain `:hover` on the visible path itself would
+   rarely fire — hovering anywhere in the edge's group does, since SVG
+   `:hover` propagates up from any descendant. `!important` is needed to beat
+   the inline `stroke` RtlWireEdge sets for the resting bus/normal color;
+   `:not(--selected)` keeps a selected wire's white unaffected by hover. */
+.react-flow__edge:hover .rtl-wire-path:not(.rtl-wire-path--selected) {
+  stroke: var(--accent-hover) !important;
+}
+
+/* React Flow draws its own dotted bounding box around whatever a rubber-band
+   drag just selected, on top of (and visually inconsistent with) our own
+   per-block ".rtl-block.is-selected" ring — DiagramCanvas relays that
+   selection into our store instead, so this box would just be a redundant,
+   differently-styled second outline. Stripped down to no visuals (rather
+   than hidden outright) so every selection method reads the same way while
+   this stays clickable — it's still what lets you drag the whole selection
+   by grabbing empty space between its blocks. The *live* drag rectangle
+   (.react-flow__selection, shown while the box is still being dragged out)
+   is untouched. */
+.canvas .react-flow__nodesselection-rect {
+  background: transparent;
+  border: none;
+}
+
+/* ── MINIMAP ──────────────────────────────────────────────────────────────── */
+
+.canvas .react-flow__minimap {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* ── CANVAS CONTROLS ──────────────────────────────────────────────────────── */
+
+/* Dark, circular, well-spaced zoom / fit / lock buttons in the top-right. The
+   stock control is a white pill with a single divider border per button; these
+   rules give each one a full light-grey ring that turns blue on hover. The
+   compound selectors below out-specify React Flow's own horizontal-layout
+   rule, which otherwise re-adds a right-only border. */
+.canvas .react-flow__controls {
+  gap: var(--space-3);
+  box-shadow: none;
+  background: transparent;
+}
+
+.canvas .react-flow__controls-button,
+.canvas .react-flow__controls.horizontal .react-flow__controls-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.canvas .react-flow__controls-button:hover,
+.canvas .react-flow__controls.horizontal .react-flow__controls-button:hover {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.canvas .react-flow__controls-button svg {
+  width: 13px;
+  height: 13px;
+  max-width: 13px;
+  max-height: 13px;
+  fill: currentColor;
+}
+
+/* ── DRAG PREVIEW ─────────────────────────────────────────────────────────── */
+
+/* Rendered by DiagramCanvas while a palette item is being dragged over it.
+   Position/size come from the component as inline styles (grid-snapped canvas
+   coordinates run through the current pan/zoom), so this only owns the look:
+   a stand-in for the block that would land there. */
+.drag-preview {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  border: 1.5px solid;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* ── RTL BLOCK NODE ───────────────────────────────────────────────────────── */
+
+.rtl-block {
+  width: 100%;
+  height: 100%;
+  /* An inset box-shadow, not a real `border`: a real border insets this
+     element's padding box — the containing block every port Handle below
+     measures its `top`/`left`/`right` against — by the border width, pulling
+     each handle a couple of pixels off the exact grid point portPosition()
+     computes (visible as a short diagonal stub at the wire's very end). A
+     box-shadow paints an identical-looking ring without touching the box
+     model, so this box's padding box stays exactly block.width x
+     block.height and every handle lands precisely on the grid. */
+  --block-outline: inset 0 0 0 1.5px var(--block-stroke, currentColor);
+  box-shadow: var(--block-outline);
+  border-radius: 8px;
+  font-size: 12px;
+  position: relative;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+/* A `filter: brightness()` on the block itself would promote its whole
+   subtree (including the text below) into a new compositing layer on
+   hover-enter/exit; text glyphs get rasterized slightly differently once
+   layered, which reads as the label "jumping" a pixel on hover. This
+   pseudo-element paints the same lightening effect without ever touching
+   the text's layer, so nothing inside the block moves. */
+.rtl-block::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+/* Skipped while a port is the thing actually under the pointer (:has a
+   hovered .rtl-port descendant) — otherwise this and the port's own hover
+   fill (.rtl-port:hover above) would both be visible at once, since hovering
+   a port also satisfies :hover on every ancestor including this block. */
+.rtl-block:hover:not(:has(.rtl-port:hover))::before {
+  opacity: 0.12;
+}
+
+.rtl-block:active {
+  cursor: grabbing;
+}
+
+.rtl-block.is-selected {
+  box-shadow: 0 0 0 2px var(--accent), var(--block-outline);
+}
+
+/* Painted by DiagramCanvas directly over a block that's mid-drag somewhere it
+   can't be dropped (on top of, or too close to, another block) — a separate,
+   plain element rather than styling the real node, because React Flow freezes
+   a node's own props (besides position) for the duration of its drag; see
+   DRAGGING_Z_INDEX's comment in DiagramCanvas.tsx. Translucent so the block
+   underneath (its label, ports, selection ring) still reads through the tint. */
+.invalid-placement-overlay {
+  position: absolute;
+  border: 1.5px solid #e0655f;
+  border-radius: 8px;
+  background: rgba(224, 101, 95, 0.45);
+  pointer-events: none;
+}
+
+/* The click-to-connect wire-in-progress: an orthogonal line from the armed
+   port to the (grid-snapped) pointer, marching to read as still "live" and
+   not yet a committed wire. */
+.connect-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.connect-preview__path {
+  stroke-linecap: round;
+  stroke-dasharray: 6 4;
+  animation: connect-preview-dash 500ms linear infinite;
+}
+
+@keyframes connect-preview-dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Absolutely positioned so the name/kind stay dead-centre on the block width,
+   never nudged by the port labels sitting inside the edges. */
+.rtl-block__header {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.rtl-block__title {
+  font-weight: 600;
+}
+
+.rtl-block__kind {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.rtl-port {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--surface-canvas);
+  border: 1.5px solid var(--text-secondary);
+  /* Click-to-connect (RtlBlockNode) drives every port through our own
+     onClick, not React Flow's native drag-connect gesture — which is turned
+     off per-handle via isConnectableStart/End. React Flow ties a handle's
+     pointer-events to CSS classes keyed off those same flags, so grant
+     pointer-events here directly instead of relying on its classes. */
+  pointer-events: all;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+/* A light fill on hover, same idea as the block-body lighten below but
+   scoped to just the port itself — see the .rtl-block:hover:not(:has(...))
+   rule, which turns the block's own lighten off while a port is the thing
+   actually under the pointer, so the two effects never both show at once. */
+.rtl-port:hover {
+  background: var(--surface-hover);
+}
+
+.rtl-port--out {
+  border-color: var(--accent);
+}
+
+/* The port a click-to-connect gesture is currently armed on: a persistent
+   ring so it reads as "waiting for a second click", distinct from the
+   hover-only glow a compatible target gets below. No size change — the
+   bubble itself must stay put, glow only. */
+.rtl-port--armed {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(76, 159, 254, 0.35);
+}
+
+/* Any other port that could complete the armed connection (opposite
+   direction, same width). No resting change — there can be many of these at
+   once — it only responds once the pointer actually lands on it, echoing the
+   armed port's own ring so the pair reads as about to join. */
+.rtl-port--connectable:hover {
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 4px rgba(76, 159, 254, 0.35);
+}
+
+/* The clock: an outlined edge-triggered triangle instead of a plain port dot,
+   so it doesn't read as just another signal. Its outline is drawn by a child
+   <svg> polygon (see RtlBlockNode) rather than a CSS `border`: this box's
+   clip-path used to be filled solid, but a `border` on a clipped box only
+   paints the rectangular box edges that happen to survive the clip — the
+   triangle's slanted sides aren't real box edges, so they'd render with no
+   stroke at all. An SVG stroke draws the actual triangle path instead.
+   `data-side` (set in RtlBlockNode) orients it so the tip always points into
+   the block. Its base sits flush against the block's own edge rather than
+   straddling it like a normal port dot does: React Flow's base
+   `.react-flow__handle-{side}` rule anchors one edge of the handle box
+   exactly on portPosition()'s grid point (`left:0`
+   for a left-side port, etc.) and centers the *box* on that point with a 50%
+   transform on both axes — dropping the cross-axis half of that transform
+   here (restating only the along-axis half, since `transform` isn't
+   additive across rules and the more specific rule below replaces it
+   outright) leaves the box's edge, not its center, sitting on the point, so
+   the whole shape extends inward from the border instead of crossing it.
+   The underlying handle's hit target is still centered on that exact point
+   as normal, so wiring and click-to-connect are unaffected. */
+.rtl-port--clock {
+  width: 15px;
+  height: 22px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  /* Matches the block's own border rather than a fixed port color — see
+     --block-stroke on .rtl-block, set per block kind from its palette. */
+  color: var(--block-stroke, var(--text-secondary));
+}
+
+/* Overrides the generic .rtl-port:hover rectangle: the clock's hit box is
+   much bigger than its actual triangle, so that rectangle would visibly
+   spill outside the drawn shape. The triangle-shaped fill below (on the
+   glyph's own polygon) replaces it instead. */
+.rtl-port--clock:hover {
+  background: transparent;
+}
+
+.rtl-port--clock[data-side="left"] {
+  transform: translateY(-50%);
+}
+
+.rtl-port--clock[data-side="right"] {
+  transform: translateY(-50%);
+}
+
+.rtl-port--clock[data-side="top"] {
+  width: 22px;
+  height: 15px;
+  transform: translateX(-50%);
+}
+
+.rtl-port--clock[data-side="bottom"] {
+  width: 22px;
+  height: 15px;
+  transform: translateX(-50%);
+}
+
+/* The triangle glyph itself, sized to exactly fill the handle box above so
+   its polygon coordinates (RtlBlockNode) can be authored in plain pixels. */
+.rtl-port--clock__glyph {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* Same light hover shade as a normal port (.rtl-port:hover), but shaped to
+   the triangle itself — a closed polygon sharing the outline's own points —
+   rather than the rectangular hit box, which is bigger than the drawn
+   triangle. Hidden until hover so the resting triangle stays hollow. */
+.rtl-port--clock__fill {
+  fill: var(--surface-hover);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.rtl-port--clock:hover .rtl-port--clock__fill {
+  opacity: 1;
+}
+
+.rtl-port__label {
+  position: absolute;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-secondary);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.rtl-port__label em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.rtl-wire__label {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--surface-canvas);
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* ── INSPECTOR ────────────────────────────────────────────────────────────── */
+
+.inspector {
+  /* Fixed at its full width regardless of the shrinking --inspector-col track:
+     as the track collapses toward 0, this box (anchored to the track's start
+     edge) is pushed past the app body's clipped right edge, reading as a
+     swipe off-screen rather than the content squeezing into nothing. */
+  background: var(--surface-panel);
+  border-left: 1px solid var(--border-subtle);
+  padding: var(--space-4);
+  overflow-y: auto;
+  width: var(--inspector-width);
+  min-width: var(--inspector-width);
+  justify-self: start;
+  visibility: hidden;
+  transition: visibility 0s linear 220ms;
+}
+
+.inspector--open {
+  visibility: visible;
+  transition: visibility 0s linear 0s;
+}
+
+.inspector__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.inspector__subheading {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.inspector__muted,
+.inspector__stat {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field > span {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.field--row {
+  flex-direction: row;
+  gap: var(--space-2);
+}
+
+.field--check {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Wraps a NameInput that has a maxLength: the counter below is absolutely
+   positioned so showing/hiding it on focus/hover never shifts layout. */
+.name-input {
+  position: relative;
+  display: block;
+  /* Reserves room below the input for the counter overlay so it never
+     collides with the next field's label, whether or not it's visible. */
+  margin-bottom: var(--space-3);
+}
+
+.name-input__counter {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--space-1);
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.name-input__counter.is-visible {
+  opacity: 1;
+}
+
+/* Two-state segmented control for a module's combinational/sequential mode
+   (see setModuleSequential in the diagram store). */
+.mode-toggle {
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.mode-toggle__option {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: var(--surface-raised);
+  padding: var(--space-1) var(--space-2);
+}
+
+.mode-toggle__option:not(:first-child) {
+  border-left: 1px solid var(--border-strong);
+}
+
+.mode-toggle__option.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.mode-toggle__option.is-active:hover {
+  border-color: var(--border-strong);
+}
+
+.field--check input {
+  width: auto;
+}
+
+/* ── PORT TABLE ───────────────────────────────────────────────────────────── */
+
+.port-list__header {
+  display: grid;
+  grid-template-columns: 1fr 60px 52px 56px 22px;
+  gap: var(--space-1);
+  margin-bottom: 2px;
+}
+
+.port-list__header span {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.port-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.port-row {
+  display: grid;
+  grid-template-columns: 1fr 60px 52px 56px 22px;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.port-row select {
+  padding: 2px;
+  font-size: 11px;
+}
+
+/* Stands in for the side <select> on a module's pinned clock/reset port —
+   plain text instead of an interactive control that would just snap back. */
+.port-row__fixed-value {
+  padding: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* No spin buttons — the column is too narrow and the value is typed anyway. */
+.port-row__width::-webkit-inner-spin-button,
+.port-row__width::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.port-row__remove {
+  padding: 0;
+  height: 22px;
+  color: var(--danger);
+  border-color: var(--border-subtle);
+}

@@ -1,0 +1,14 @@
+appId: com.joshuakirby.rtl-schematic
+productName: RTL Schematic
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+win:
+  target: nsis
+mac:
+  target: dmg
+linux:
+  target: AppImage
