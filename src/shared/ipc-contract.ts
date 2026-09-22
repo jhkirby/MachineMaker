@@ -71,6 +71,9 @@ export type EditorCommand =
   | "zoom-in"
   | "zoom-out"
   | "toggle-lock"
+  | "toggle-file-menu"
+  | "toggle-export-menu"
+  | "toggle-palette"
   | "deselect";
 
 /** Shape of the API exposed on `window.rtl` by the preload script. */

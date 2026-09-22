@@ -6,10 +6,16 @@
  * --------------------------------------------------------------------------- */
 
 import {
+  GATE_MAX_INPUTS,
+  GATE_MIN_INPUTS,
   MAX_BUS_WIDTH,
+  MAX_PORTS,
   MIN_BUS_WIDTH,
+  countedPorts,
   isClockPort,
   isResetPort,
+  portDirectionSummary,
+  type GateType,
   type PortDirection,
   type PortSide,
   type RtlBlock,
@@ -27,7 +33,8 @@ import NameInput from "./NameInput";
 import NumericField from "./NumericField";
 
 const SIDES: PortSide[] = ["left", "right", "top", "bottom"];
-const DIRECTIONS: PortDirection[] = ["in", "out"];
+const DIRECTIONS: PortDirection[] = ["in", "out", "inout"];
+const GATE_TYPES: GateType[] = ["AND", "NAND", "OR", "NOR", "XOR", "XNOR"];
 
 /**
  * Right sidebar. Shows properties for the current single selection (block or
@@ -108,6 +115,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   const updatePort = useDiagramStore((s) => s.updatePort);
   const removePort = useDiagramStore((s) => s.removePort);
   const setModuleSequential = useDiagramStore((s) => s.setModuleSequential);
+  const setGateType = useDiagramStore((s) => s.setGateType);
 
   const otherBlockNames = blocks
     .filter((b) => b.id !== block.id)
@@ -131,23 +139,40 @@ function BlockInspector({ block }: { block: RtlBlock }) {
 
   // A register's d/q are its whole reason for existing — an edge-triggered
   // flip-flop always latches d, driving q — so unlike a generic port their
-  // direction isn't a free choice either.
+  // direction isn't a free choice either. Every one of a gate's ports is the
+  // same way, just for a different reason: normalizeFixedPorts (model/
+  // port-layout.ts) holds its one output to "out" and forces every other
+  // port to "in" regardless, so a Drive dropdown here would only ever snap
+  // back on the next render.
   const hasFixedDirection = (port: RtlPort): boolean =>
     isClockOrReset(port) ||
-    (block.kind === "register" && (port.name === "d" || port.name === "q"));
+    (block.kind === "register" && (port.name === "d" || port.name === "q")) ||
+    block.kind === "gate";
 
   // clk/reset are always exactly 1 bit — a bus doesn't mean anything for a
   // clock edge or a reset level.
   const hasFixedWidth = isClockOrReset;
 
+  // Read fresh on every render rather than cached, same as everything else
+  // here — used both by canRemovePort below and by the "+ Port" cap further
+  // down.
+  const gateInputCount =
+    block.kind === "gate"
+      ? block.ports.filter((port) => port.direction === "in").length
+      : 0;
+
   // A module's own arbitrary ports (added via the "+ Port" button below) are
-  // the only ones a diagram author can ever remove. Everything else —
-  // clk/reset, a register's d/q, and an I/O port's or constant's single
-  // defining port — is structural: the block would be meaningless without
-  // it, and (unlike a module) neither io nor constant offers any way to add
-  // a replacement.
+  // the only ones a diagram author can ever remove — plus, for a gate, any
+  // of its input ports (added the same way), never its one fixed output, and
+  // never the last two: a gate below GATE_MIN_INPUTS isn't a boolean
+  // function of anything any more. The × simply doesn't render at the floor
+  // (rather than rendering disabled) — see the empty <span> fallback below,
+  // which fills the same grid cell so nothing else in the row shifts.
   const canRemovePort = (port: RtlPort): boolean =>
-    block.kind === "module" && !hasFixedDirection(port);
+    (block.kind === "module" && !hasFixedDirection(port)) ||
+    (block.kind === "gate" &&
+      port.direction === "in" &&
+      gateInputCount > GATE_MIN_INPUTS);
 
   // An I/O port or constant has exactly one signal flowing in one direction
   // (out, in this app) — top/bottom read as a bus entering or leaving a
@@ -177,6 +202,26 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   // outside the canvas's DOM tree entirely, so both have to be set again
   // here from the same source of truth, once, for the whole section to read.
   const strokeColor = resolvePalette(block, theme).stroke;
+
+  // MAX_PORTS is a hard ceiling (diagram-model.ts) — past it, a
+  // hand-authored schematic stops being something a diagram author can
+  // read at a glance. countedPorts excludes clk/reset: those are
+  // structural, not part of a diagram author's own port budget, so a
+  // sequential module doesn't hit the cap two ports sooner than a
+  // combinational one for no reason. The store's own addPort already
+  // refuses past this point too (so the P shortcut can't bypass the
+  // disabled button here), but greying the button out and explaining why
+  // is the actual UI for it.
+  // A gate's own cap (GATE_MAX_INPUTS) is on its input count directly rather
+  // than countedPorts, whose clk/reset exclusion is meaningless for a kind
+  // that never has either — see the store's addPort, which guards the same
+  // way.
+  const atMaxPorts =
+    block.kind === "gate"
+      ? gateInputCount >= GATE_MAX_INPUTS
+      : countedPorts(block.ports) >= MAX_PORTS;
+  const portSummary = portDirectionSummary(block.ports);
+  const canAddPort = block.kind === "module" || block.kind === "gate";
 
   return (
     <div
@@ -265,13 +310,38 @@ function BlockInspector({ block }: { block: RtlBlock }) {
         </div>
       ) : null}
 
+      {block.kind === "gate" ? (
+        <div className="field">
+          <span>Gate Type</span>
+          <div
+            className="gate-type-toggle"
+            role="group"
+            aria-label="Gate type"
+          >
+            {GATE_TYPES.map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={`gate-type-toggle__option${
+                  block.gateType === type ? " is-active" : ""
+                }`}
+                aria-pressed={block.gateType === type}
+                onClick={() => setGateType(block.id, type)}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <h3 className="inspector__subheading">Ports</h3>
-      <div className="port-table">
+      <div className={`port-table${block.kind === "gate" ? " port-table--no-width" : ""}`}>
         <div className="port-list__header" aria-hidden="true">
           <span>Name</span>
           <span>Side</span>
           <span>Drive</span>
-          <span>Width</span>
+          {block.kind === "gate" ? null : <span>Width</span>}
           <span />
         </div>
         <ul className="port-list">
@@ -314,7 +384,9 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                   title={
                     isClockOrReset(port)
                       ? "A clock/reset is always an input"
-                      : "A register's d is always an input, q always an output"
+                      : block.kind === "gate"
+                        ? "A gate's output is always \"out\", every other port always \"in\""
+                        : "A register's d is always an input, q always an output"
                   }
                 >
                   {port.direction}
@@ -329,7 +401,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                   }
                 />
               )}
-              {hasFixedWidth(port) ? (
+              {block.kind === "gate" ? null : hasFixedWidth(port) ? (
                 <span
                   className="port-row__fixed-value"
                   title="A clock/reset is always 1 bit"
@@ -367,11 +439,27 @@ function BlockInspector({ block }: { block: RtlBlock }) {
         </ul>
       </div>
 
-      {block.kind === "module" ? (
-        <div className="field field--row">
-          <button type="button" onClick={() => addPort(block.id, "left", "in")}>
-            + Port
-          </button>
+      {canAddPort ? (
+        <div className="field">
+          <div className="field--row">
+            <button
+              type="button"
+              className="port-table__add"
+              disabled={atMaxPorts}
+              title={
+                atMaxPorts ? "Maximum ports reached" : "Add a new port (P)"
+              }
+              aria-label={
+                atMaxPorts ? "Maximum ports reached" : "Add a new port"
+              }
+              onClick={() => addPort(block.id, "left", "in")}
+            >
+              + Port
+            </button>
+          </div>
+          {portSummary ? (
+            <p className="port-table__summary">{portSummary}</p>
+          ) : null}
         </div>
       ) : null}
 

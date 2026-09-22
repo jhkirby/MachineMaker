@@ -18,6 +18,7 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
+  ControlButton,
   Controls,
   MiniMap,
   ReactFlow,
@@ -41,7 +42,6 @@ import { PALETTE_DRAG_TYPE } from "./ComponentPalette";
 import RtlBlockNode from "./nodes/RtlBlockNode";
 import RtlWireEdge from "./edges/RtlWireEdge";
 import {
-  BUS_COLOR,
   INVALID_PLACEMENT_PALETTE,
   WIRE_COLOR,
   paletteFor,
@@ -74,6 +74,19 @@ const NO_IDS: ReadonlySet<string> = new Set();
 /** Glide, don't jump, when the fit-view control recentres the diagram. */
 const FIT_VIEW_OPTIONS = { padding: 0.2, duration: 200 };
 
+/* Overrides React Flow's default Controls tooltips (bare "Zoom In" etc.,
+   @xyflow/system) to fold in each one's keyboard shortcut — see
+   use-keyboard-shortcuts.ts — matching the "(shortcut)" tooltip convention
+   already used elsewhere (e.g. Toolbar's theme toggle). The lock/interactive
+   button isn't listed here: it's replaced by a fully custom ControlButton
+   below since its tooltip text has to flip with lock state, which a single
+   static label can't do. */
+const CONTROLS_ARIA_LABELS = {
+  "controls.zoomIn.ariaLabel": "Zoom in (+)",
+  "controls.zoomOut.ariaLabel": "Zoom out (-)",
+  "controls.fitView.ariaLabel": "Fit view (C)",
+} as const;
+
 /** Hold Ctrl (or Cmd) to add/remove blocks from the current selection. */
 const MULTI_SELECT_KEYS = ["Control", "Meta"];
 
@@ -91,6 +104,40 @@ const CANVAS_SURFACE_COLOR: Record<Theme, string> = {
   dark: "#14161b",
   light: "#e8eaef",
 };
+
+/* Same 32-unit viewBox and filled-path style as React Flow's own built-in
+   Plus/Minus/FitView control icons (not exported by the library, so this
+   custom control button — see the grid-toggle button below — draws its own
+   grid glyph to match: a 2x2 grid of cells inside a border, out-and-back in
+   one path so it inherits `fill: currentColor` the same way the built-ins
+   do (app.css, CANVAS CONTROLS). */
+function GridIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+      <path d="M0 0h32v4.2H0zM0 13.9h32v4.2H0zM0 27.8h32v4.2H0zM0 0h4.2v32H0zM13.9 0h4.2v32h-4.2zM27.8 0h4.2v32h-4.2z" />
+    </svg>
+  );
+}
+
+/* React Flow's own Lock/Unlock glyphs (not exported by the library) for the
+   custom lock control button below — copied verbatim from its Controls
+   source so this reads as the exact same icon, just movable in the button
+   order. */
+function LockIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 32">
+      <path d="M21.333 10.667H19.81V7.619C19.81 3.429 16.38 0 12.19 0 8 0 4.571 3.429 4.571 7.619v3.048H3.048A3.056 3.056 0 000 13.714v15.238A3.056 3.056 0 003.048 32h18.285a3.056 3.056 0 003.048-3.048V13.714a3.056 3.056 0 00-3.048-3.047zM12.19 24.533a3.056 3.056 0 01-3.047-3.047 3.056 3.056 0 013.047-3.048 3.056 3.056 0 013.048 3.048 3.056 3.056 0 01-3.048 3.047zm4.724-13.866H7.467V7.619c0-2.59 2.133-4.724 4.723-4.724 2.591 0 4.724 2.133 4.724 4.724v3.048z" />
+    </svg>
+  );
+}
+
+function UnlockIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 32">
+      <path d="M21.333 10.667H19.81V7.619C19.81 3.429 16.38 0 12.19 0c-4.114 1.828-1.37 2.133.305 2.438 1.676.305 4.42 2.59 4.42 5.181v3.048H3.047A3.056 3.056 0 000 13.714v15.238A3.056 3.056 0 003.048 32h18.285a3.056 3.056 0 003.048-3.048V13.714a3.056 3.056 0 00-3.048-3.047zM12.19 24.533a3.056 3.056 0 01-3.047-3.047 3.056 3.056 0 013.047-3.048 3.056 3.056 0 013.048 3.048 3.056 3.056 0 01-3.048 3.047z" />
+    </svg>
+  );
+}
 
 /** zIndex given to a block while it's being dragged, so it always renders
  * above every other block instead of whatever stacking order it started in.
@@ -130,6 +177,12 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
   // Drag snapping tightens to the sub-cell grid once the viewer zooms in far
   // enough for those lines to be aimable; see AdaptiveGridBackground.
   const zoom = useStore((s) => s.transform[2]);
+  // Mirrors the selector React Flow's own Controls uses internally to decide
+  // which of the Lock/Unlock glyphs to show — kept in sync here too since the
+  // lock button below is a custom ControlButton, not the built-in one.
+  const isInteractive = useStore(
+    (s) => s.nodesDraggable || s.nodesConnectable || s.elementsSelectable,
+  );
   const snapGrid = useMemo((): [number, number] => {
     const pitch = snapPitchForZoom(zoom);
     return [pitch, pitch];
@@ -137,6 +190,7 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
   const diagram = useDiagramStore((s) => s.diagram);
   const selection = useDiagramStore((s) => s.selection);
   const gridVisible = useDiagramStore((s) => s.gridVisible);
+  const toggleGrid = useDiagramStore((s) => s.toggleGrid);
   const theme = useDiagramStore((s) => s.theme);
   const draggingKind = useDiagramStore((s) => s.draggingKind);
   const armedPort = useDiagramStore((s) => s.armedPort);
@@ -551,21 +605,23 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
     };
   }, [armedPortAnchor, pointerFlowPosition, zoom]);
 
+  const toggleInteractivity = useCallback(() => {
+    // Mirror what the Controls lock button does to the internal store.
+    const next = !storeApi.getState().nodesDraggable;
+    storeApi.setState({
+      nodesDraggable: next,
+      nodesConnectable: next,
+      elementsSelectable: next,
+    });
+  }, [storeApi]);
+
   useImperativeHandle(
     ref,
     () => ({
       fitView: () => flow.fitView(FIT_VIEW_OPTIONS),
       zoomIn: () => flow.zoomIn({ duration: 150 }),
       zoomOut: () => flow.zoomOut({ duration: 150 }),
-      toggleLock: () => {
-        // Mirror what the Controls lock button does to the internal store.
-        const next = !storeApi.getState().nodesDraggable;
-        storeApi.setState({
-          nodesDraggable: next,
-          nodesConnectable: next,
-          elementsSelectable: next,
-        });
-      },
+      toggleLock: toggleInteractivity,
       deselectAll: () => clearSelection(),
       exportPng: async () => {
         const currentNodes = flow.getNodes();
@@ -591,7 +647,7 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
         });
       },
     }),
-    [flow, storeApi, clearSelection, theme],
+    [flow, storeApi, clearSelection, theme, toggleInteractivity],
   );
 
   const previewTemplate = draggingKind ? templateFor(draggingKind) : null;
@@ -631,13 +687,32 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
         multiSelectionKeyCode={MULTI_SELECT_KEYS}
         deleteKeyCode={["Delete", "Backspace"]}
         defaultEdgeOptions={{ type: "rtlWire" }}
+        ariaLabelConfig={CONTROLS_ARIA_LABELS}
       >
         {gridVisible ? <AdaptiveGridBackground /> : null}
         <Controls
           position="top-right"
           orientation="horizontal"
           fitViewOptions={FIT_VIEW_OPTIONS}
-        />
+          showInteractive={false}
+        >
+          <ControlButton
+            className="react-flow__controls-gridtoggle"
+            onClick={toggleGrid}
+            title={gridVisible ? "Hide grid (Ctrl+G)" : "Show grid (Ctrl+G)"}
+            aria-label={gridVisible ? "Hide grid" : "Show grid"}
+          >
+            <GridIcon />
+          </ControlButton>
+          <ControlButton
+            className="react-flow__controls-interactive"
+            onClick={toggleInteractivity}
+            title={isInteractive ? "Lock canvas (L)" : "Unlock canvas (L)"}
+            aria-label={isInteractive ? "Lock canvas" : "Unlock canvas"}
+          >
+            {isInteractive ? <UnlockIcon /> : <LockIcon />}
+          </ControlButton>
+        </Controls>
         <MiniMap<RtlBlockNodeType>
           pannable
           zoomable
@@ -691,7 +766,13 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
             <path
               className="connect-preview__path"
               d={connectPreview.path}
-              stroke={connectPreview.isBus ? BUS_COLOR : WIRE_COLOR}
+              // Always grey, even for a bus: unlike a committed wire (which
+              // needs the color/width difference to stay identifiable once
+              // it's one of many on the canvas), an in-progress connection is
+              // the only one of its kind on screen at any moment, so there's
+              // nothing for a bus's own blue to disambiguate here — plain
+              // grey reads as "not committed yet" regardless of bit width.
+              stroke={WIRE_COLOR}
               strokeWidth={connectPreview.isBus ? 3 : 1.5}
               fill="none"
             />

@@ -88,7 +88,7 @@ export default function ComponentPalette() {
           type="button"
           className="palette__toggle"
           onClick={togglePalette}
-          title={collapsed ? "Expand panel" : "Collapse panel"}
+          title={collapsed ? "Expand panel (Ctrl+L)" : "Collapse panel (Ctrl+L)"}
           aria-label={collapsed ? "Expand panel" : "Collapse panel"}
         >
           <PanelToggleIcon direction={collapsed ? "right" : "left"} />

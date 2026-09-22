@@ -36,14 +36,27 @@
   --accent-glow: rgba(76, 159, 254, 0.35);
   --danger-glow: rgba(224, 101, 95, 0.35);
 
-  /* A flat light grey for icon buttons, menu triggers, and palette cards to
+  /* The scrollbar thumb's own three-step ramp (app.css, SCROLLBAR) — its
+     own dedicated tokens rather than reusing --hover-highlight/
+     --text-secondary for the hover/active steps: those two sit only a
+     couple of shades apart in this theme, which left a click reading as no
+     different from a hover. Each step here is deliberately spaced further
+     from its neighbors, and gets *lighter* going default → hover → active
+     to stay visible against this theme's dark surfaces. */
+  --scrollbar-thumb: #52565f;
+  --scrollbar-thumb-hover: #6e7480;
+  --scrollbar-thumb-active: #9aa0ab;
+
+  /* A flat mid grey for icon buttons, menu triggers, and palette cards to
      highlight to on hover (unlike --surface-hover, which is a per-theme
-     elevation tint) so hover always reads as an unmistakable "light grey",
-     not just a shade darker or lighter than whatever the surface already
-     was. This dark-mode value is a touch darker than light mode's (below) —
-     against this theme's much darker surfaces, the same light-mode grey
-     read as too bright/washed-out by comparison. */
-  --hover-highlight: #a8aeb9;
+     elevation tint) so hover always reads as an unmistakable, deliberate
+     highlight rather than just a shade darker or lighter than whatever the
+     surface already was. Originally a much lighter grey (#a8aeb9) — against
+     this theme's near-black surfaces and near-white text/icons
+     (--text-primary), that read as a jarring flash that briefly drowned out
+     whatever label or icon it sat behind, rather than a hover cue. Still a
+     clear step up from --surface-hover, just nowhere near as bright. */
+  --hover-highlight: #565b64;
 
   /* A port's (and clk triangle's) own hover fill — plain --surface-hover
      here, same as this app's original look: against this theme's much
@@ -72,6 +85,7 @@
 
   /* Structure. */
   --radius: 6px;
+  --scrollbar-size: 10px;
   --titlebar-height: 32px;
   --toolbar-height: 48px;
   --sidebar-width: 232px;
@@ -111,6 +125,13 @@
      from them directly. */
   --accent-glow: rgba(47, 111, 224, 0.35);
   --danger-glow: rgba(200, 67, 60, 0.35);
+
+  /* Same three-step ramp as the dark-mode definition, mirrored: each step
+     gets *darker* going default → hover → active instead, to stay visible
+     against this theme's light surfaces. */
+  --scrollbar-thumb: #c5cad3;
+  --scrollbar-thumb-hover: #a8afba;
+  --scrollbar-thumb-active: #7d8492;
 
   --hover-highlight: #cbd0d9;
 

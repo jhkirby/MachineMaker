@@ -118,7 +118,7 @@ export class SvgExporter {
         `${escapeXml(block.label)}</text>`,
       `<text x="${block.x + block.width / 2}" y="${block.y + 30}" ` +
         `text-anchor="middle" fill="${palette.stroke}" font-size="10">` +
-        `${escapeXml(block.kind)}</text>`,
+        `${escapeXml(block.kind === "gate" ? (block.gateType ?? "AND") : block.kind)}</text>`,
     ];
 
     for (const port of block.ports) {

@@ -28,6 +28,9 @@ export interface DiagramCommands {
   zoomIn(): void;
   zoomOut(): void;
   toggleLock(): void;
+  toggleFileMenu(): void;
+  toggleExportMenu(): void;
+  togglePalette(): void;
   deselect(): void;
   /** Route a command name (from a keyboard chord) to the matching action. */
   run(command: EditorCommand): void;
@@ -134,6 +137,12 @@ export function useDiagramCommands(
     const zoomIn = (): void => canvasRef.current?.zoomIn();
     const zoomOut = (): void => canvasRef.current?.zoomOut();
     const toggleLock = (): void => canvasRef.current?.toggleLock();
+    const toggleFileMenu = (): void =>
+      useDiagramStore.getState().toggleMenu("file");
+    const toggleExportMenu = (): void =>
+      useDiagramStore.getState().toggleMenu("export");
+    const togglePalette = (): void =>
+      useDiagramStore.getState().togglePalette();
     const deselect = (): void =>
       useDiagramStore.getState().setSelection({ blockIds: [], wireIds: [] });
 
@@ -153,6 +162,9 @@ export function useDiagramCommands(
       zoomIn,
       zoomOut,
       toggleLock,
+      toggleFileMenu,
+      toggleExportMenu,
+      togglePalette,
       deselect,
       run: (command) => {
         const table: Record<EditorCommand, () => void> = {
@@ -172,6 +184,9 @@ export function useDiagramCommands(
           "zoom-in": zoomIn,
           "zoom-out": zoomOut,
           "toggle-lock": toggleLock,
+          "toggle-file-menu": toggleFileMenu,
+          "toggle-export-menu": toggleExportMenu,
+          "toggle-palette": togglePalette,
           deselect,
         };
         table[command]?.();

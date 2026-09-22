@@ -10,6 +10,7 @@
 
 import { Position, type Connection, type Edge, type Node } from "@xyflow/react";
 import type {
+  PortDirection,
   PortSide,
   RtlBlock,
   RtlDiagram,
@@ -49,17 +50,40 @@ export function sideToPosition(side: PortSide): Position {
 }
 
 /**
+ * Whether two ports' directions allow a wire between them: an in/out pair
+ * (either order), or an inout/inout pair — `"inout"` is bidirectional and
+ * can only ever connect to another `"inout"`, never to a plain `"in"` or
+ * `"out"`, so mixing an inout with either of those has no defined meaning
+ * any more than wiring two outputs together would.
+ *
+ * @param a - One port's direction.
+ * @param b - The other port's direction.
+ * @returns True if the pair is a valid direction combination.
+ */
+export function directionsCompatible(
+  a: PortDirection,
+  b: PortDirection,
+): boolean {
+  if (a === "inout" || b === "inout") {
+    return a === "inout" && b === "inout";
+  }
+  return a !== b;
+}
+
+/**
  * Resolve two clicked ports into a source→target connection for a
- * click-to-connect gesture, or null if the pair can't be wired together: one
- * must be an output and the other an input, both the same bit width — wiring
- * a bus to a narrower (or wider) port, or an output to another output, has no
- * defined meaning — and they can't be the same port.
+ * click-to-connect gesture, or null if the pair can't be wired together: the
+ * directions must be compatible (see {@link directionsCompatible}) and both
+ * ports the same bit width — wiring a bus to a narrower (or wider) port has
+ * no defined meaning — and they can't be the same port.
  *
  * @param diagram - The diagram to look up both ports in.
  * @param a - One port clicked, in either order relative to `b`.
  * @param b - The other port clicked.
- * @returns The connection to create (`source` is always the output port), or
- *   null if the pair isn't a valid connection.
+ * @returns The connection to create (`source` is the output port for an
+ *   in/out pair; for an inout/inout pair, which end is which is arbitrary —
+ *   it's whichever was clicked first), or null if the pair isn't a valid
+ *   connection.
  */
 export function resolvePortPairConnection(
   diagram: RtlDiagram,
@@ -75,7 +99,11 @@ export function resolvePortPairConnection(
       ?.ports.find((p) => p.id === ref.portId);
   const portA = portOf(a);
   const portB = portOf(b);
-  if (!portA || !portB || portA.direction === portB.direction) {
+  if (
+    !portA ||
+    !portB ||
+    !directionsCompatible(portA.direction, portB.direction)
+  ) {
     return null;
   }
   if ((portA.width ?? 1) !== (portB.width ?? 1)) {

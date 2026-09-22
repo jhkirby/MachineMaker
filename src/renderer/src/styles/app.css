@@ -70,6 +70,15 @@ select:focus {
   border-color: var(--block-stroke, var(--accent));
 }
 
+/* Same color, just on hover — matches a port row's Side/Drive columns
+   (.dropdown__trigger:hover, below), which already do this: hovering
+   either kind of control in that row should read as the same "about to
+   edit this" cue, not have the two column types responding differently. */
+input:hover,
+select:hover {
+  border-color: var(--block-stroke, var(--accent));
+}
+
 /* The dropdown popup's own selected/hovered row — same fallback as the
    focus ring above. Chromium renders a <select>'s options as real
    descendants of the page (just painted in a separate layer), so they
@@ -84,6 +93,64 @@ select option:hover {
 input.is-invalid,
 input.is-invalid:focus {
   border-color: var(--danger);
+}
+
+/* ── SCROLLBAR ────────────────────────────────────────────────────────────── */
+
+/* Applied globally via the universal selector, so every scrollable region
+   in the app — the ports list, a dropdown panel, the palette, the
+   inspector, the toolbar's File/Export menus — gets the same slim,
+   theme-aware scrollbar instead of whatever chunky, non-theme-aware one
+   Windows would otherwise draw (arrow buttons at both ends, a thick fixed
+   grey thumb). `::-webkit-scrollbar` and friends are the only way to style
+   one in Chromium (the standard `scrollbar-color`/`scrollbar-width`
+   properties are Firefox-only), which is fine here — this app only ever
+   renders inside its own bundled Electron/Chromium, never another engine. */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* No up/down arrow buttons — a plain draggable thumb is this scrollbar's
+   whole affordance, the same minimal shape most modern apps use instead of
+   the OS default. */
+*::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
+/* Three shades of grey, one per state (tokens.css) — dedicated scrollbar
+   tokens rather than reusing --border-strong/--hover-highlight/
+   --text-secondary: those sit only a couple of shades apart from each
+   other in dark mode, which left clicking the thumb reading as no
+   different from just hovering it. Each theme's own three steps run in the
+   direction that keeps the thumb visible against that theme's surfaces —
+   lighter at each step in dark mode, darker at each step in light mode
+   (see the tokens' own definitions). The transparent border +
+   background-clip pair insets the visible thumb a couple of px from the
+   track's edges — a scrollbar thumb has no `padding` to reach for instead. */
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 /* ── APP LAYOUT ───────────────────────────────────────────────────────────── */
@@ -954,8 +1021,14 @@ input.is-invalid:focus {
   gap: var(--space-3);
 }
 
+/* Shared by every block kind's "Ports" and "Color" subheadings (both are
+   plain <h3 className="inspector__subheading">, InspectorPanel.tsx) — a
+   divider styled here applies everywhere at once rather than needing a
+   separate rule per section. */
 .inspector__subheading {
-  margin: var(--space-2) 0 0;
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
   font-size: 12px;
   color: var(--text-secondary);
 }
@@ -1035,6 +1108,21 @@ input.is-invalid:focus {
   border-left: 1px solid var(--border-strong);
 }
 
+/* Same grey a toolbar-menu trigger (the File/Export buttons) hovers to —
+   the option that isn't currently picked has no border of its own for the
+   generic button:hover:not(:disabled) rule (further up) to color, so
+   without this, hovering it gave no feedback at all. Excludes .is-active:
+   the active option already has its own resting fill (--block-stroke) and
+   its own hover rule right below, which this would otherwise outrank on
+   specificity and override. Also pins border-color back to --border-strong:
+   the second option's border-left is its only visible border edge (the rest
+   are `none` from the base rule above), and that generic button:hover rule
+   would otherwise still recolor it the unrelated plain --accent blue. */
+.mode-toggle__option:not(.is-active):hover {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
 /* --block-stroke here comes from an inline style on .mode-toggle itself
    (InspectorPanel.tsx) — not inherited from a .rtl-block ancestor the way
    the canvas's own port/selection styling reads it, since this panel sits
@@ -1049,17 +1137,68 @@ input.is-invalid:focus {
   border-color: var(--border-strong);
 }
 
+/* Six-way segmented control for a gate's boolean function (setGateType in
+   the diagram store) — same look and interaction as .mode-toggle above, just
+   a 3-column grid wrapping to two rows instead of one flex row, since six
+   options in one row would run too narrow to read at this panel's width. */
+.gate-type-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.gate-type-toggle__option {
+  border: none;
+  border-radius: 0;
+  background: var(--surface-raised);
+  padding: var(--space-1) var(--space-2);
+  font-size: 12px;
+}
+
+/* Interior dividers: every column but the first gets a left border, every
+   row but the first a top border — the grid equivalent of .mode-toggle's
+   single row of left borders above. */
+.gate-type-toggle__option:not(:nth-child(3n + 1)) {
+  border-left: 1px solid var(--border-strong);
+}
+
+.gate-type-toggle__option:nth-child(n + 4) {
+  border-top: 1px solid var(--border-strong);
+}
+
+.gate-type-toggle__option:not(.is-active):hover {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
+.gate-type-toggle__option.is-active {
+  background: var(--block-stroke, var(--accent));
+  color: #fff;
+}
+
+.gate-type-toggle__option.is-active:hover {
+  border-color: var(--border-strong);
+}
+
 .field--check input {
   width: auto;
 }
 
 /* ── PORT TABLE ───────────────────────────────────────────────────────────── */
 
+/* padding-right matches .port-list's own combined inset below (its
+   breathing-room padding plus its permanently-reserved scrollbar gutter) —
+   this header has no scrollbar of its own to reserve space for, but its
+   columns still need to land in the same spots as the scrollable rows
+   underneath, whether or not that scrollbar happens to be showing. */
 .port-list__header {
   display: grid;
   grid-template-columns: 1fr 70px 48px 50px 22px;
   gap: var(--space-1);
   margin-bottom: 2px;
+  padding-right: calc(var(--space-2) + var(--scrollbar-size));
 }
 
 .port-list__header span {
@@ -1068,13 +1207,33 @@ input.is-invalid:focus {
   text-align: center;
 }
 
+/* Caps at exactly 10 rows' worth of height (each row is 22px — see the
+   shared .port-row input/select/dropdown-trigger/fixed-value height rule
+   below — plus the 9 gaps between them) and scrolls internally past that,
+   rather than letting the whole inspector grow without bound for a block
+   with many ports. .port-list__header (the Name/Side/Drive/Width labels)
+   is this list's own sibling, not a child of it, so it's never part of the
+   scrolling region and stays put above it; the "+ Port" button below is
+   likewise a sibling of the whole .port-table, so it's already outside
+   this scroll region without needing anything further. */
 .port-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  padding-right: var(--space-2);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  max-height: calc(22px * 10 + var(--space-2) * 9);
+  overflow-y: auto;
+  /* Reserves the scrollbar's own gutter unconditionally — without this, a
+     row count that crosses the 10-row cap makes the just-appeared
+     scrollbar eat into the row grid's own width, squeezing every column
+     (most visibly the gap before the × button) exactly when a diagram
+     author isn't touching anything that should be moving. The gutter
+     stays reserved (and empty) at 10 rows or fewer, so nothing ever shifts
+     when it crosses that line in either direction. */
+  scrollbar-gutter: stable;
 }
 
 .port-row {
@@ -1082,6 +1241,15 @@ input.is-invalid:focus {
   grid-template-columns: 1fr 70px 48px 50px 22px;
   gap: var(--space-1);
   align-items: center;
+}
+
+/* A gate's ports are always exactly 1 bit (see normalizeFixedPorts,
+   model/port-layout.ts), so its Ports table drops the Width column
+   entirely rather than showing it fixed to "1" on every row the way
+   clk/reset do on a module or register. */
+.port-table--no-width .port-list__header,
+.port-table--no-width .port-row {
+  grid-template-columns: 1fr 70px 48px 22px;
 }
 
 /* A plain text <input> and a native <select> never share a height at equal
@@ -1122,6 +1290,33 @@ input.is-invalid:focus {
   height: 22px;
   color: var(--danger);
   border-color: var(--border-subtle);
+}
+
+/* Overrides the generic button:hover:not(:disabled) rule (RESET/BASE,
+   plain --accent) the same way every other control in a block's inspector
+   already does — see input:focus/.dropdown__trigger:hover/etc. — so this
+   still reads as "this block's own control" on hover, not an unrelated
+   blue. The × glyph itself stays --danger regardless; only the ring
+   changes. */
+.port-row__remove:hover:not(:disabled) {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+/* Plain button, no distinguishing look at rest — its own hover is what
+   needs to break from the generic button:hover:not(:disabled) rule (plain
+   --accent), same as every other control in a block's inspector already
+   does. */
+.port-table__add:hover:not(:disabled) {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+/* Direction tally under the + Port button (e.g. "3 in, 2 out") — the
+   block's own color, same as every other block-colored accent in this
+   panel (--block-stroke, set inline on .inspector__section above). */
+.port-table__summary {
+  margin: var(--space-1) 0 0;
+  font-size: 12px;
+  color: var(--block-stroke, var(--accent));
 }
 
 /* ── DROPDOWN ─────────────────────────────────────────────────────────────── */
@@ -1173,12 +1368,12 @@ input.is-invalid:focus {
   color: var(--text-muted);
 }
 
+/* position/top/left/min-width come from an inline style (Dropdown.tsx) —
+   the panel is portaled to <body> rather than laid out under .dropdown, so
+   a scrollable ancestor (e.g. the port table's own overflow-y: auto) can
+   never clip it the way an ordinary absolutely-positioned child would be. */
 .dropdown__panel {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
   z-index: 30;
-  min-width: 100%;
   width: max-content;
   margin: 0;
   padding: var(--space-1) 0;
@@ -1220,10 +1415,15 @@ input.is-invalid:focus {
 
 /* ── COLOR PICKER ─────────────────────────────────────────────────────────── */
 
+/* Closes off the Color section with the same divider .inspector__subheading
+   draws above "Ports" and "Color" themselves — this is the section's own
+   last element, so there's nothing after it to hang a border-top on. */
 .color-picker {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .color-picker__swatches {

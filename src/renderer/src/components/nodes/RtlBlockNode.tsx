@@ -233,7 +233,7 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
       <div className="rtl-block__header">
         <div className="rtl-block__title">{block.label}</div>
         <div className="rtl-block__kind" style={{ color: palette.stroke }}>
-          {block.kind}
+          {block.kind === "gate" ? (block.gateType ?? "AND") : block.kind}
         </div>
       </div>
 
@@ -264,54 +264,68 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
         ]
           .filter(Boolean)
           .join(" ");
+        // An "inout" port can be either end of a wire, but a single Handle
+        // can only ever be one — React Flow keys its handle registry by
+        // (node, handle id, type), so two Handles sharing this same id, one
+        // of each type, stacked exactly on top of each other, is how a port
+        // offers both without becoming two visually distinct ports. clk/
+        // reset are always "in" (see component-library.ts), so this never
+        // has to coexist with the clock-triangle glyph below.
+        const handleTypes: Array<"source" | "target"> =
+          port.direction === "inout"
+            ? ["source", "target"]
+            : [port.direction === "out" ? "source" : "target"];
         return (
           <div key={port.id}>
-            <Handle
-              id={port.id}
-              type={port.direction === "out" ? "source" : "target"}
-              position={sideToPosition(port.side)}
-              style={
-                isClock
-                  ? { ...layout.handle, clipPath: clockClipPath(port.side) }
-                  : layout.handle
-              }
-              className={portClassName}
-              // Read by the .rtl-port--clock CSS rules to orient the clock
-              // triangle so its tip always points into the block regardless
-              // of which edge it sits on.
-              data-side={port.side}
-              // Click-to-connect (handlePortClick, above) fully replaces React
-              // Flow's own pointerdown-drag connect gesture; without these the
-              // "connectionindicator" class it relies on for pointer-events
-              // would still gate on isConnectableStart, so app.css grants
-              // .rtl-port pointer-events directly instead.
-              isConnectableStart={false}
-              isConnectableEnd={false}
-              onClick={(event) => {
-                event.stopPropagation();
-                handlePortClick(port);
-              }}
-            >
-              {isClock ? (
-                <svg
-                  className="rtl-port--clock__glyph"
-                  viewBox={CLOCK_TRIANGLE[port.side].viewBox}
-                  preserveAspectRatio="none"
-                >
-                  <polygon
-                    className="rtl-port--clock__fill"
-                    points={CLOCK_TRIANGLE_FILL[port.side]}
-                  />
-                  <polyline
-                    points={CLOCK_TRIANGLE[port.side].points}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              ) : null}
-            </Handle>
+            {handleTypes.map((type) => (
+              <Handle
+                key={`${port.id}-${type}`}
+                id={port.id}
+                type={type}
+                position={sideToPosition(port.side)}
+                style={
+                  isClock
+                    ? { ...layout.handle, clipPath: clockClipPath(port.side) }
+                    : layout.handle
+                }
+                className={portClassName}
+                // Read by the .rtl-port--clock CSS rules to orient the clock
+                // triangle so its tip always points into the block regardless
+                // of which edge it sits on.
+                data-side={port.side}
+                // Click-to-connect (handlePortClick, above) fully replaces
+                // React Flow's own pointerdown-drag connect gesture; without
+                // these the "connectionindicator" class it relies on for
+                // pointer-events would still gate on isConnectableStart, so
+                // app.css grants .rtl-port pointer-events directly instead.
+                isConnectableStart={false}
+                isConnectableEnd={false}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handlePortClick(port);
+                }}
+              >
+                {isClock ? (
+                  <svg
+                    className="rtl-port--clock__glyph"
+                    viewBox={CLOCK_TRIANGLE[port.side].viewBox}
+                    preserveAspectRatio="none"
+                  >
+                    <polygon
+                      className="rtl-port--clock__fill"
+                      points={CLOCK_TRIANGLE_FILL[port.side]}
+                    />
+                    <polyline
+                      points={CLOCK_TRIANGLE[port.side].points}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : null}
+              </Handle>
+            ))}
             <span className="rtl-port__label" style={layout.label}>
               {port.name}
               {formatBusWidth(port.width) ? (

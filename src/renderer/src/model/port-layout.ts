@@ -401,40 +401,94 @@ export function normalizeFixedPorts(block: RtlBlock): void {
       port.side = "right";
     }
   }
+  // A gate has exactly one output and any number of inputs, and — unlike a
+  // module, where direction is a free choice per port — that shape is a data
+  // invariant this function is the sole enforcement point for, the same as
+  // clk/reset's direction/width below: the inspector merely hides the Drive
+  // dropdown for a gate's ports rather than being what actually holds the
+  // line. Whichever port already reads "out" stays the output; a block that
+  // somehow has none (freshly loaded from a hand-edited file, say) falls
+  // back to its first port rather than leaving every port "in".
+  if (block.kind === "gate") {
+    const output =
+      block.ports.find((port) => port.direction === "out") ?? block.ports[0];
+    block.ports.forEach((port) => {
+      port.direction = port === output ? "out" : "in";
+      // A gate's ports are always plain 1-bit signals — see the Ports table
+      // in InspectorPanel.tsx, which doesn't even offer a Width column for
+      // this kind.
+      port.width = undefined;
+    });
+  }
   const clk = pinsClk(block.kind) ? block.ports.find(isClockPort) : undefined;
   const reset = pinsReset(block.kind)
     ? block.ports.find(isResetPort)
     : undefined;
-  if (!clk && !reset) {
-    return;
+  if (clk || reset) {
+    if (clk) {
+      clk.side = "left";
+      clk.direction = "in";
+      clk.width = undefined;
+    }
+    if (reset) {
+      reset.side = "bottom";
+      reset.direction = "in";
+      reset.width = undefined;
+    }
+    if (clk) {
+      // Held back from the bottom-left corner only when this block also pins
+      // a reset there (see clkCornerClearanceCells) — otherwise clk pins to
+      // the true bottom-left corner, with no reset label for it to avoid.
+      pinToEdge(
+        block,
+        block.ports,
+        "left",
+        clk,
+        "last",
+        clkCornerClearanceCells(block),
+      );
+    }
+    if (reset) {
+      pinToEdge(block, block.ports, "bottom", reset, "first");
+    }
+    growToFitPorts(block);
   }
-  if (clk) {
-    clk.side = "left";
-    clk.direction = "in";
-    clk.width = undefined;
-  }
-  if (reset) {
-    reset.side = "bottom";
-    reset.direction = "in";
-    reset.width = undefined;
-  }
-  if (clk) {
-    // Held back from the bottom-left corner only when this block also pins a
-    // reset there (see clkCornerClearanceCells) — otherwise clk pins to the
-    // true bottom-left corner, with no reset label for it to avoid.
-    pinToEdge(
-      block,
-      block.ports,
-      "left",
-      clk,
-      "last",
-      clkCornerClearanceCells(block),
-    );
-  }
-  if (reset) {
-    pinToEdge(block, block.ports, "bottom", reset, "first");
-  }
-  growToFitPorts(block);
+  sortPorts(block, clk, reset);
+}
+
+/** Sort rank for {@link sortPorts}: "in" first, then "out", then "inout". */
+function directionRank(direction: RtlPort["direction"]): number {
+  return direction === "in" ? 0 : direction === "out" ? 1 : 2;
+}
+
+/**
+ * Reorder a block's ports (the array itself, not just how any one view of it
+ * happens to render them) to the app's one canonical order: clk then reset
+ * first, on whichever kind pins them (see {@link pinsClk}/{@link pinsReset}),
+ * then every other port grouped by direction — in, then out, then inout —
+ * with each port's position *within* its group left exactly where it was.
+ * Every list of a block's ports (the inspector's Ports table, chiefly) reads
+ * `block.ports` directly in array order rather than sorting it again itself,
+ * so this is the one place that order is actually decided.
+ *
+ * @param block - The block to reorder; `ports` replaced in place.
+ * @param clk - This block's clock port, if {@link pinsClk} found one.
+ * @param reset - This block's reset port, if {@link pinsReset} found one.
+ */
+function sortPorts(
+  block: RtlBlock,
+  clk: RtlPort | undefined,
+  reset: RtlPort | undefined,
+): void {
+  const rest = block.ports.filter((port) => port !== clk && port !== reset);
+  // Array.prototype.sort has been a stable sort (equal-rank ports keep their
+  // relative order) since ES2019 — every engine this app ships on qualifies.
+  rest.sort((a, b) => directionRank(a.direction) - directionRank(b.direction));
+  block.ports = [
+    ...(clk ? [clk] : []),
+    ...(reset ? [reset] : []),
+    ...rest,
+  ];
 }
 
 /**

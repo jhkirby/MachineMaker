@@ -8,11 +8,16 @@
 import { create } from "zustand";
 import type { Connection } from "@xyflow/react";
 import {
+  countedPorts,
   createEmptyDiagram,
   formatBusWidth,
   isClockPort,
   isResetPort,
+  GATE_MAX_INPUTS,
+  GATE_MIN_INPUTS,
+  MAX_PORTS,
   type BlockKind,
+  type GateType,
   type PortDirection,
   type PortSide,
   type RtlDiagram,
@@ -20,6 +25,7 @@ import {
   type RtlWire,
 } from "../../../shared/diagram-model";
 import { createBlock, createPort } from "../model/component-library";
+import { directionsCompatible } from "../model/flow-adapters";
 import { FINE_GRID_SIZE, snapToGrid } from "../model/grid";
 import {
   centerPortGroups,
@@ -82,6 +88,14 @@ export interface DiagramStore {
   /** Whether the left component palette is collapsed to a slim rail. */
   paletteCollapsed: boolean;
   /**
+   * Which toolbar dropdown (File/Export) is open, or null if neither is —
+   * lifted up here (rather than left as each ToolbarMenu's own local state)
+   * so the Ctrl+F / Ctrl+E shortcuts can open one from outside the toolbar's
+   * own component tree, the same way toggleGrid/toggleTheme already do for
+   * their own toolbar controls.
+   */
+  openMenu: "file" | "export" | null;
+  /**
    * Kind currently being dragged out of the palette, or null when no
    * palette drag is in progress. The canvas watches this to render a
    * grid-snapped preview of where the block would land.
@@ -106,6 +120,9 @@ export interface DiagramStore {
   toggleGrid(): void;
   toggleTheme(): void;
   togglePalette(): void;
+  /** Open the given toolbar menu, or close it if it's already the open one. */
+  toggleMenu(menu: "file" | "export"): void;
+  closeMenu(): void;
   setDraggingKind(kind: BlockKind | null): void;
   setArmedPort(port: ArmedPort | null): void;
 
@@ -135,6 +152,7 @@ export interface DiagramStore {
   updatePort(blockId: string, portId: string, patch: Partial<RtlPort>): void;
   removePort(blockId: string, portId: string): void;
   setModuleSequential(blockId: string, sequential: boolean): void;
+  setGateType(blockId: string, gateType: GateType): void;
 
   // ── wires ──
   connect(connection: Connection): void;
@@ -215,6 +233,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     gridVisible: true,
     theme: loadStoredTheme(),
     paletteCollapsed: false,
+    openMenu: null,
     draggingKind: null,
     armedPort: null,
     past: [],
@@ -264,6 +283,11 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
 
     togglePalette: () =>
       set((state) => ({ paletteCollapsed: !state.paletteCollapsed })),
+
+    toggleMenu: (menu) =>
+      set((state) => ({ openMenu: state.openMenu === menu ? null : menu })),
+
+    closeMenu: () => set({ openMenu: null }),
 
     setDraggingKind: (kind) => set({ draggingKind: kind }),
 
@@ -355,6 +379,18 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         if (!block) {
           return;
         }
+        // A gate's own cap is its input count (GATE_MAX_INPUTS) — much
+        // tighter than the generic MAX_PORTS, and counted directly rather
+        // than through countedPorts, whose clk/reset exclusion doesn't apply
+        // to a kind that never has either.
+        const atCap =
+          block.kind === "gate"
+            ? block.ports.filter((port) => port.direction === "in").length >=
+              GATE_MAX_INPUTS
+            : countedPorts(block.ports) >= MAX_PORTS;
+        if (atCap) {
+          return;
+        }
         const slot = nextFreeSlot(block, side);
         block.ports.push(
           createPort(
@@ -386,9 +422,28 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     removePort: (blockId, portId) =>
       commit((draft) => {
         const block = draft.blocks.find((b) => b.id === blockId);
-        if (block) {
-          block.ports = block.ports.filter((p) => p.id !== portId);
+        if (!block) {
+          return;
         }
+        const port = block.ports.find((p) => p.id === portId);
+        if (!port) {
+          return;
+        }
+        // A gate's own output can never be removed, and its inputs stop
+        // being removable at GATE_MIN_INPUTS — see canRemovePort in
+        // InspectorPanel.tsx, which is what actually keeps the × button
+        // from appearing in the first place; this is the same backstop
+        // normalizeFixedPorts is for direction/width, just for a mutation
+        // that can't be un-done after the fact by re-normalizing.
+        if (
+          block.kind === "gate" &&
+          (port.direction !== "in" ||
+            block.ports.filter((p) => p.direction === "in").length <=
+              GATE_MIN_INPUTS)
+        ) {
+          return;
+        }
+        block.ports = block.ports.filter((p) => p.id !== portId);
         draft.wires = draft.wires.filter(
           (w) =>
             !(w.sourceBlockId === blockId && w.sourcePortId === portId) &&
@@ -444,6 +499,14 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         );
       }),
 
+    setGateType: (blockId, gateType) =>
+      commit((draft) => {
+        const block = draft.blocks.find((b) => b.id === blockId);
+        if (block && block.kind === "gate") {
+          block.gateType = gateType;
+        }
+      }),
+
     // ── WIRES ─────────────────────────────────────────────────────────────
 
     connect: (connection) =>
@@ -472,7 +535,11 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         const targetPort = draft.blocks
           .find((b) => b.id === target)
           ?.ports.find((p) => p.id === targetHandle);
-        if (sourcePort?.direction !== "out" || targetPort?.direction !== "in") {
+        if (
+          !sourcePort ||
+          !targetPort ||
+          !directionsCompatible(sourcePort.direction, targetPort.direction)
+        ) {
           return;
         }
         if ((sourcePort?.width ?? 1) !== (targetPort?.width ?? 1)) {

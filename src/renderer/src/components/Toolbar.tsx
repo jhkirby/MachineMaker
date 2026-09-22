@@ -95,6 +95,9 @@ export default function Toolbar({ commands }: ToolbarProps) {
   const canRedo = useDiagramStore((s) => s.future.length > 0);
   const theme = useDiagramStore((s) => s.theme);
   const toggleTheme = useDiagramStore((s) => s.toggleTheme);
+  const openMenu = useDiagramStore((s) => s.openMenu);
+  const toggleMenu = useDiagramStore((s) => s.toggleMenu);
+  const closeMenu = useDiagramStore((s) => s.closeMenu);
 
   return (
     <header className="toolbar">
@@ -131,6 +134,9 @@ export default function Toolbar({ commands }: ToolbarProps) {
         <span className="toolbar__divider" />
         <ToolbarMenu
           label="File"
+          title="File menu (Ctrl+F)"
+          open={openMenu === "file"}
+          onOpenChange={(open) => (open ? toggleMenu("file") : closeMenu())}
           items={[
             { label: "New", onClick: commands.newDiagram },
             { label: "Open", onClick: () => void commands.open() },
@@ -139,6 +145,9 @@ export default function Toolbar({ commands }: ToolbarProps) {
         />
         <ToolbarMenu
           label="Export"
+          title="Export menu (Ctrl+E)"
+          open={openMenu === "export"}
+          onOpenChange={(open) => (open ? toggleMenu("export") : closeMenu())}
           items={[
             { label: "PNG", onClick: () => void commands.exportPng() },
             { label: "SVG", onClick: () => void commands.exportSvg() },

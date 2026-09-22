@@ -87,6 +87,24 @@ export const COMPONENT_LIBRARY: readonly ComponentTemplate[] = [
     ],
   },
   {
+    kind: "gate",
+    displayName: "Gate",
+    hint: "Logic gate (AND, OR, XOR, …)",
+    defaultWidth: cells(8),
+    defaultHeight: cells(6),
+    // "y" starts fixed to "out" and "a"/"b" to "in" here same as any other
+    // template port, but unlike every other kind, normalizeFixedPorts
+    // (model/port-layout.ts) then holds that shape for the whole lifetime of
+    // the block: every port added later is forced to "in", and whichever
+    // port is "out" (normally just this "y") is the only one that can ever
+    // be — see its own doc comment.
+    ports: [
+      { name: "a", side: "left", direction: "in", slot: 2 },
+      { name: "b", side: "left", direction: "in", slot: 4 },
+      { name: "y", side: "right", direction: "out", slot: 3 },
+    ],
+  },
+  {
     kind: "io",
     displayName: "I/O Port",
     baseName: "Port",
@@ -162,7 +180,7 @@ export function createBlock(
     slot: port.slot,
     width: port.width,
   }));
-  return {
+  const block: RtlBlock = {
     id: nanoid(8),
     kind,
     label: nextBlockLabel(kind, existingLabels),
@@ -172,6 +190,10 @@ export function createBlock(
     height: template.defaultHeight,
     ports,
   };
+  if (kind === "gate") {
+    block.gateType = "AND";
+  }
+  return block;
 }
 
 /** Prefix for auto-numbered port names ("Port 1", "Port 2", …). */

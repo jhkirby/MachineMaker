@@ -43,12 +43,14 @@ const PALETTE_BY_THEME: Record<Theme, Record<BlockKind, BlockPalette>> = {
     register: MODULE_BLUE_DARK,
     io: MODULE_BLUE_DARK,
     constant: MODULE_BLUE_DARK,
+    gate: MODULE_BLUE_DARK,
   },
   light: {
     module: MODULE_BLUE_LIGHT,
     register: MODULE_BLUE_LIGHT,
     io: MODULE_BLUE_LIGHT,
     constant: MODULE_BLUE_LIGHT,
+    gate: MODULE_BLUE_LIGHT,
   },
 };
 
@@ -112,7 +114,12 @@ export function paletteFor(kind: BlockKind, theme: Theme = "dark"): BlockPalette
  * inspector's Color section (see ColorPicker.tsx) — the standard "500"
  * step of a well-known, broadly-licensed color ramp, chosen because every
  * entry is already tuned to be readable and distinct from its neighbors
- * rather than picked ad hoc.
+ * rather than picked ad hoc. Exactly 17: with the leading "revert to
+ * default" swatch, that's 18 circles total — two even rows of nine at this
+ * panel's width, not two full rows plus a third with a single leftover.
+ * Indigo was the one dropped, sitting close enough in hue to both blue and
+ * violet (its neighbors here) that the set stays visually distinct without
+ * it.
  */
 export const COLOR_SWATCHES: readonly string[] = [
   "#ef4444", // red
@@ -126,7 +133,6 @@ export const COLOR_SWATCHES: readonly string[] = [
   "#06b6d4", // cyan
   "#0ea5e9", // sky
   "#3b82f6", // blue
-  "#6366f1", // indigo
   "#8b5cf6", // violet
   "#a855f7", // purple
   "#d946ef", // fuchsia

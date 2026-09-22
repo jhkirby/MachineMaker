@@ -37,6 +37,13 @@ const GLYPHS: Record<BlockKind, JSX.Element> = {
       <path d="M7.5 8h6" />
     </>
   ),
+  // An AND gate: a flat-left, D-shaped body (two inputs feeding one output).
+  gate: (
+    <>
+      <path d="M4 3h3a5 5 0 0 1 0 10H4z" />
+      <path d="M1 6h3M1 10h3M12 8h3" />
+    </>
+  ),
 };
 
 /**

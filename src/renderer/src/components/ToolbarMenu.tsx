@@ -5,7 +5,7 @@
  * Last Modified: 2026-09-21
  * --------------------------------------------------------------------------- */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 /** One action inside a {@link ToolbarMenu}'s dropdown panel. */
 export interface ToolbarMenuItem {
@@ -19,6 +19,15 @@ interface ToolbarMenuProps {
   /** Text on the trigger button, e.g. "File". */
   label: string;
   items: readonly ToolbarMenuItem[];
+  /** Tooltip for the trigger button, e.g. `"File menu (Ctrl+F)"`. */
+  title?: string;
+  /** Whether the dropdown panel is shown — lifted to the caller so a global
+   *  keyboard shortcut (Ctrl+F / Ctrl+E, see use-keyboard-shortcuts.ts) can
+   *  open a specific menu from outside this component. */
+  open: boolean;
+  /** Called to open, close, or (on an outside click/Escape/item pick) request
+   *  closing the panel. */
+  onOpenChange: (open: boolean) => void;
 }
 
 /**
@@ -60,8 +69,13 @@ function ChevronIcon({ open }: { open: boolean }) {
  * @param props - See {@link ToolbarMenuProps}.
  * @returns The menu trigger and, while open, its dropdown panel.
  */
-export default function ToolbarMenu({ label, items }: ToolbarMenuProps) {
-  const [open, setOpen] = useState(false);
+export default function ToolbarMenu({
+  label,
+  items,
+  title,
+  open,
+  onOpenChange,
+}: ToolbarMenuProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,12 +84,12 @@ export default function ToolbarMenu({ label, items }: ToolbarMenuProps) {
     }
     const onPointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        onOpenChange(false);
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOpen(false);
+        onOpenChange(false);
       }
     };
     window.addEventListener("pointerdown", onPointerDown);
@@ -84,7 +98,7 @@ export default function ToolbarMenu({ label, items }: ToolbarMenuProps) {
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, onOpenChange]);
 
   return (
     <div className="toolbar-menu" ref={rootRef}>
@@ -93,7 +107,8 @@ export default function ToolbarMenu({ label, items }: ToolbarMenuProps) {
         className="toolbar-menu__trigger"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((was) => !was)}
+        title={title}
+        onClick={() => onOpenChange(!open)}
       >
         {label}
         <ChevronIcon open={open} />
@@ -108,7 +123,7 @@ export default function ToolbarMenu({ label, items }: ToolbarMenuProps) {
               className="toolbar-menu__item"
               disabled={item.disabled}
               onClick={() => {
-                setOpen(false);
+                onOpenChange(false);
                 item.onClick();
               }}
             >
