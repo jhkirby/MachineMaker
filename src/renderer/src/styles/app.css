@@ -60,10 +60,24 @@ select {
   width: 100%;
 }
 
+/* --block-stroke is only ever set inside a block inspector's own section
+   (InspectorPanel.tsx), so this falls back to plain --accent everywhere
+   else (the toolbar's title field, a wire's label, the palette) without
+   needing a separate rule for each. */
 input:focus,
 select:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--block-stroke, var(--accent));
+}
+
+/* The dropdown popup's own selected/hovered row — same fallback as the
+   focus ring above. Chromium renders a <select>'s options as real
+   descendants of the page (just painted in a separate layer), so they
+   still inherit whatever --block-stroke the inspector section set. */
+select option:checked,
+select option:hover {
+  background: var(--block-stroke, var(--accent));
+  color: #fff;
 }
 
 /* Flagged by NameInput / NumericField while the current text breaks the rules. */
@@ -100,6 +114,88 @@ input.is-invalid:focus {
 
 .app__body--inspector-open {
   --inspector-col: var(--inspector-width);
+}
+
+/* ── TITLEBAR ─────────────────────────────────────────────────────────────── */
+
+/* Replaces the native OS chrome (WindowManager creates the BrowserWindow with
+   frame: false). The whole bar is a drag handle except the control buttons,
+   which opt back out — Electron reads -webkit-app-region straight off the
+   computed style, so no JS is needed to make dragging/double-click-to-maximize
+   work beyond the button clicks wired in TitleBar.tsx. */
+.titlebar {
+  height: var(--titlebar-height);
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  background: var(--surface-base);
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+}
+
+.titlebar__drag-region {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 var(--space-3);
+  /* Lets the window icon + title shrink and ellipsize before ever crowding
+     the control buttons, which must stay fixed-size and fully clickable. */
+  overflow: hidden;
+}
+
+.titlebar__icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  /* Purely decorative — the region behind it is still the drag handle. */
+  pointer-events: none;
+}
+
+.titlebar__text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.titlebar__dirty {
+  color: var(--accent);
+  margin-right: var(--space-1);
+}
+
+.titlebar__controls {
+  flex-shrink: 0;
+  display: flex;
+  /* Buttons are the one part of the bar that must NOT drag the window. */
+  -webkit-app-region: no-drag;
+}
+
+.titlebar__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.titlebar__button:hover {
+  background: var(--hover-highlight);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+
+.titlebar__button--close:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 /* ── TOOLBAR ──────────────────────────────────────────────────────────────── */
@@ -279,7 +375,16 @@ input.is-invalid:focus {
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
+  /* Same resting look as a .palette__item card below (border-subtle, not
+     the plain button rule's border-strong), so the collapse control reads
+     as one family with the rows it collapses rather than a generic button. */
   background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+}
+
+.palette__toggle:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
 }
 
 .palette__toggle-icon {
@@ -354,7 +459,8 @@ input.is-invalid:focus {
    rarely fire — hovering anywhere in the edge's group does, since SVG
    `:hover` propagates up from any descendant. `!important` is needed to beat
    the inline `stroke` RtlWireEdge sets for the resting bus/normal color;
-   `:not(--selected)` keeps a selected wire's white unaffected by hover. */
+   `:not(--selected)` keeps a selected wire's own highlight color (theme-aware
+   — see selectionColorFor in block-appearance.ts) unaffected by hover. */
 .react-flow__edge:hover .rtl-wire-path:not(.rtl-wire-path--selected) {
   stroke: var(--accent-hover) !important;
 }
@@ -372,6 +478,18 @@ input.is-invalid:focus {
 .canvas .react-flow__nodesselection-rect {
   background: transparent;
   border: none;
+}
+
+/* The live drag rectangle itself (.react-flow__selection, still being
+   dragged out) ships two different built-in colors — a blue one and a grey
+   one — switched by React Flow's own light/dark split (DiagramCanvas passes
+   our theme straight through as its colorMode), not by anything in this
+   file. Pinned to our own grey tokens instead (tokens.css), so it always
+   reads as "grey", each theme's own shade tuned for contrast against that
+   theme's canvas rather than one fixed value neither is designed for. */
+.canvas .react-flow__selection {
+  background: var(--selection-fill);
+  border: 1px dotted var(--selection-border);
 }
 
 /* ── MINIMAP ──────────────────────────────────────────────────────────────── */
@@ -495,8 +613,33 @@ input.is-invalid:focus {
   cursor: grabbing;
 }
 
-.rtl-block.is-selected {
-  box-shadow: 0 0 0 2px var(--accent), var(--block-outline);
+/* Selection ring — drawn as its own overlay pseudo-element, painted on top
+   of every child, rather than folded into the block's own box-shadow
+   (--block-outline) the way earlier revisions of this rule did. A
+   box-shadow on .rtl-block itself paints *underneath* its normal-flow
+   children (the port Handles, including the clk triangle — RtlBlockNode),
+   which is fine at the resting 1.5px width the triangle's own base is
+   calibrated to meet exactly, but thickening that same box-shadow for
+   selection left the extra width hidden behind the triangle instead of
+   reaching it, showing as a gap between the ring and the triangle's base.
+   ::after is generated after every real child, so it paints last (on top)
+   regardless — z-index pins that down explicitly rather than leaning on
+   default stacking order alone, in case a Handle's own inline transform
+   ever gives it a stacking context of its own. Uses --block-stroke (the
+   same property --block-outline itself reads) rather than the generic
+   --accent, so a selected block's ring reads as "this block's own border,
+   emphasized" instead of switching to an unrelated blue that clashes with
+   a custom-colored block. Inset and inset:0 like the base ring, so the
+   block's own padding box — what every port Handle measures its position
+   against — still never moves. */
+.rtl-block.is-selected::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 3px var(--block-stroke, var(--accent));
+  pointer-events: none;
 }
 
 /* Painted by DiagramCanvas directly over a block that's mid-drag somewhere it
@@ -577,34 +720,66 @@ input.is-invalid:focus {
     border-color 120ms ease;
 }
 
+/* Stacked above the selection ring (.rtl-block.is-selected::after, z-index
+   1) so a plain port's own circle — drawn on the grid point the ring
+   passes directly through — stays fully visible over it instead of getting
+   partly painted over. The clk triangle (.rtl-port--clock) is deliberately
+   excluded: unlike a plain port, its base is what that ring is *supposed*
+   to cover, to close the gap its own thicker selected width would
+   otherwise leave short of the triangle (see the ring's own comment). */
+.rtl-port:not(.rtl-port--clock) {
+  z-index: 2;
+}
+
 /* A light fill on hover, same idea as the block-body lighten below but
    scoped to just the port itself — see the .rtl-block:hover:not(:has(...))
    rule, which turns the block's own lighten off while a port is the thing
-   actually under the pointer, so the two effects never both show at once. */
+   actually under the pointer, so the two effects never both show at once.
+   --port-hover-fill (tokens.css) is plain --surface-hover in dark mode —
+   this app's original look, unchanged — but redefined to --hover-highlight
+   in light mode, where --surface-hover sits only a few shades from
+   --surface-canvas (the port's resting fill) and reads as barely-there. */
 .rtl-port:hover {
-  background: var(--surface-hover);
-}
-
-.rtl-port--out {
-  border-color: var(--accent);
+  background: var(--port-hover-fill);
+  border-color: var(--block-stroke, var(--accent));
 }
 
 /* The port a click-to-connect gesture is currently armed on: a persistent
    ring so it reads as "waiting for a second click", distinct from the
-   hover-only glow a compatible target gets below. No size change — the
-   bubble itself must stay put, glow only. */
+   glow every compatible target gets below. No size change — the bubble
+   itself must stay put, glow only. Uses --block-stroke (this port's own
+   block's color — see RtlBlockNode.tsx) rather than the generic --accent,
+   so the ring reads as "this block's own port, highlighted" instead of an
+   unrelated blue that clashes with a custom-colored block; --block-stroke-
+   glow is the same color pre-blended to a translucent halo (computed in TS
+   — see withAlpha in block-appearance.ts — since CSS alone can't derive an
+   alpha variant of an arbitrary custom-property color). Both fall back to
+   the plain accent tokens for anything rendered without a block ancestor. */
 .rtl-port--armed {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(76, 159, 254, 0.35);
+  border-color: var(--block-stroke, var(--accent));
+  box-shadow: 0 0 0 4px var(--block-stroke-glow, var(--accent-glow));
 }
 
-/* Any other port that could complete the armed connection (opposite
-   direction, same width). No resting change — there can be many of these at
-   once — it only responds once the pointer actually lands on it, echoing the
-   armed port's own ring so the pair reads as about to join. */
-.rtl-port--connectable:hover {
-  border-color: var(--accent-hover);
-  box-shadow: 0 0 0 4px rgba(76, 159, 254, 0.35);
+/* Every other port that could complete the armed connection (opposite
+   direction, same bit width — see resolvePortPairConnection). Glows as soon
+   as a port is armed, not just on hover: with several valid targets on
+   screen at once, a diagram author needs to see all of them at a glance,
+   not discover them one hover at a time. Each target glows in *its own*
+   block's color (same --block-stroke variable, just inherited from whatever
+   block this particular port belongs to), same as the armed port above. */
+.rtl-port--connectable {
+  border-color: var(--block-stroke, var(--accent));
+  box-shadow: 0 0 0 4px var(--block-stroke-glow, var(--accent-glow));
+}
+
+/* The negative case: a port that can't complete the armed connection at all
+   (wrong direction, or a bit width that doesn't match) — direct feedback
+   only once the pointer actually lands on it, rather than flagging every
+   invalid port red all at once, which would be most of the diagram on a
+   wide bus and read as an error state rather than plain non-applicability. */
+.rtl-port--incompatible:hover {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-glow);
 }
 
 /* The clock: an outlined edge-triggered triangle instead of a plain port dot,
@@ -633,17 +808,40 @@ input.is-invalid:focus {
   border-radius: 0;
   background: transparent;
   border: none;
-  /* Matches the block's own border rather than a fixed port color — see
-     --block-stroke on .rtl-block, set per block kind from its palette. */
-  color: var(--block-stroke, var(--text-secondary));
+  /* Same border color as every plain port's ring, --text-secondary — see
+     .rtl-port, which no longer varies it by direction either. Previously
+     read from --block-stroke (the block's own per-kind color), which made
+     the triangle look like part of the block's frame rather than one more
+     port alongside the plain circles. */
+  color: var(--text-secondary);
 }
 
 /* Overrides the generic .rtl-port:hover rectangle: the clock's hit box is
    much bigger than its actual triangle, so that rectangle would visibly
    spill outside the drawn shape. The triangle-shaped fill below (on the
-   glyph's own polygon) replaces it instead. */
+   glyph's own polygon) replaces it instead. The border-color equivalent —
+   color, here, since the triangle's outline is an SVG stroke using
+   currentColor (see RtlBlockNode) rather than a real CSS border — still
+   applies, same as a plain port's ring turning accent-colored on hover. */
 .rtl-port--clock:hover {
   background: transparent;
+  color: var(--block-stroke, var(--accent));
+}
+
+/* The connectable/incompatible glow (above) is a box-shadow ring, but the
+   clock's own hit box is clip-path'd down to the triangle's silhouette (see
+   the handle's inline clipPath, RtlBlockNode) — a box-shadow, which paints
+   outside that box, is clipped away with it and never reads. `color` is
+   this shape's real equivalent, same as it already is for the plain
+   .rtl-port--clock:hover rule above; these two win over it on specificity
+   (two classes vs. one) so the state that's actually true right now applies
+   regardless of source order. */
+.rtl-port--clock.rtl-port--connectable {
+  color: var(--block-stroke, var(--accent));
+}
+
+.rtl-port--clock.rtl-port--incompatible:hover {
+  color: var(--danger);
 }
 
 .rtl-port--clock[data-side="left"] {
@@ -679,17 +877,25 @@ input.is-invalid:focus {
 /* Same light hover shade as a normal port (.rtl-port:hover), but shaped to
    the triangle itself — a closed polygon sharing the outline's own points —
    rather than the rectangular hit box, which is bigger than the drawn
-   triangle. Hidden until hover so the resting triangle stays hollow. */
+   triangle. Filled at rest with the same canvas color a plain port's own
+   circle sits on, so the triangle reads as solid/cut-out like every other
+   port instead of transparent to the block behind it; swaps to the same
+   hover fill a plain port uses (.rtl-port:hover, above) on interaction. */
 .rtl-port--clock__fill {
-  fill: var(--surface-hover);
-  opacity: 0;
-  transition: opacity 120ms ease;
+  fill: var(--surface-canvas);
+  transition: fill 120ms ease;
 }
 
 .rtl-port--clock:hover .rtl-port--clock__fill {
-  opacity: 1;
+  fill: var(--port-hover-fill);
 }
 
+/* No transform here despite the layer-promotion trick this label actually
+   needs (see RtlBlockNode.tsx's portLayout, which sets it inline instead) —
+   this label's own positioning transform (translateX/Y(-50%)) is already
+   set inline per-port, and an inline style fully replaces a stylesheet's
+   `transform` for that element rather than combining with it, so a
+   `transform` declared only here would just be silently discarded. */
 .rtl-port__label {
   position: absolute;
   font-size: 9px;
@@ -699,8 +905,13 @@ input.is-invalid:focus {
   white-space: nowrap;
 }
 
+/* Same color as the block's own border (--block-stroke, set per block —
+   its kind color, or a custom one, see resolvePalette) rather than the
+   generic --accent, so a bus width annotation reads as part of this
+   specific block's own styling instead of an unrelated blue that clashes
+   with a custom-colored block. */
 .rtl-port__label em {
-  color: var(--accent);
+  color: var(--block-stroke, var(--accent));
   font-style: normal;
 }
 
@@ -824,8 +1035,13 @@ input.is-invalid:focus {
   border-left: 1px solid var(--border-strong);
 }
 
+/* --block-stroke here comes from an inline style on .mode-toggle itself
+   (InspectorPanel.tsx) — not inherited from a .rtl-block ancestor the way
+   the canvas's own port/selection styling reads it, since this panel sits
+   outside the canvas's DOM tree entirely. Falls back to --accent for safety
+   only; the inline style always sets it in practice. */
 .mode-toggle__option.is-active {
-  background: var(--accent);
+  background: var(--block-stroke, var(--accent));
   color: #fff;
 }
 
@@ -841,7 +1057,7 @@ input.is-invalid:focus {
 
 .port-list__header {
   display: grid;
-  grid-template-columns: 1fr 60px 52px 56px 22px;
+  grid-template-columns: 1fr 70px 48px 50px 22px;
   gap: var(--space-1);
   margin-bottom: 2px;
 }
@@ -863,23 +1079,35 @@ input.is-invalid:focus {
 
 .port-row {
   display: grid;
-  grid-template-columns: 1fr 60px 52px 56px 22px;
+  grid-template-columns: 1fr 70px 48px 50px 22px;
   gap: var(--space-1);
   align-items: center;
 }
 
-.port-row select {
-  padding: 2px;
+/* A plain text <input> and a native <select> never share a height at equal
+   padding — the select's own UA chrome (its dropdown arrow, mainly) forces
+   extra intrinsic height Chromium won't fully give up to CSS padding alone.
+   An explicit height plus border-box, applied to every control the row can
+   contain, is what actually pins them to one shared line instead. */
+.port-row input,
+.port-row select,
+.port-row .dropdown__trigger,
+.port-row__fixed-value {
+  box-sizing: border-box;
+  height: 22px;
+  padding: 2px 4px;
   font-size: 11px;
 }
 
 /* Stands in for the side <select> on a module's pinned clock/reset port —
-   plain text instead of an interactive control that would just snap back. */
+   plain text instead of an interactive control that would just snap back.
+   Flex-centered rather than relying on line-height to vertically center the
+   text the way a real form control's own UA baseline handling does. */
 .port-row__fixed-value {
-  padding: 2px;
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-muted);
-  text-align: center;
 }
 
 /* No spin buttons — the column is too narrow and the value is typed anyway. */
@@ -894,4 +1122,192 @@ input.is-invalid:focus {
   height: 22px;
   color: var(--danger);
   border-color: var(--border-subtle);
+}
+
+/* ── DROPDOWN ─────────────────────────────────────────────────────────────── */
+
+/* Stands in for a plain <select> (the port table's Side/Drive columns)
+   wherever the open option list itself needs real CSS control — on Windows,
+   Chromium paints a native <select>'s hovered row with the OS's own system
+   highlight color, which no stylesheet can override, so a list expected to
+   glow in a block's own custom color (--block-stroke) needs real DOM
+   elements to style instead of the browser's native popup. */
+.dropdown {
+  position: relative;
+}
+
+.dropdown__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  width: 100%;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* Same color a focused text input's border takes (app.css, RESET/BASE) —
+   hover and open both read as "about to edit this", the same as a plain
+   input's own focus state, rather than the generic button hover rule
+   (button:hover:not(:disabled), further up) turning it the unrelated plain
+   --accent. That generic rule outranks a plain `:hover` here on
+   specificity alone (element + two pseudo-classes beats class + one), so
+   this needs the same `:not(:disabled)` padding to come out ahead — the
+   same fix already applied to .palette__item, .toolbar__icon-button, etc. */
+.dropdown__trigger:hover:not(:disabled),
+.dropdown__trigger[aria-expanded="true"] {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+.dropdown__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown__chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.dropdown__panel {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 30;
+  min-width: 100%;
+  width: max-content;
+  margin: 0;
+  padding: var(--space-1) 0;
+  list-style: none;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.dropdown__option {
+  padding: var(--space-1) var(--space-2);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The actual current value: solid, full-strength block color, regardless of
+   whether the pointer happens to be over it too — this is the one row that
+   should never look provisional. */
+.dropdown__option.is-selected {
+  background: var(--block-stroke, var(--accent));
+  color: #fff;
+}
+
+/* Whichever row the pointer or an arrow key is currently on, when that
+   isn't also the selected row — a lighter, translucent tint of the same
+   color (--block-stroke-glow, the same token the canvas's own armed/
+   connectable port glow uses) rather than the selected row's solid fill,
+   so the two states stay visually distinct: "this is what's picked" vs.
+   "this is what you're about to pick". */
+.dropdown__option:hover:not(.is-selected),
+.dropdown__option.is-active:not(.is-selected) {
+  background: var(--block-stroke-glow, var(--hover-highlight));
+  color: var(--text-primary);
+}
+
+/* ── COLOR PICKER ─────────────────────────────────────────────────────────── */
+
+.color-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.color-picker__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A plain round swatch button — deliberately not the app's usual button
+   look (no visible border/background of its own beyond the color itself)
+   so a whole row of these reads as color chips, not a toolbar. */
+.color-picker__swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+
+.color-picker__swatch:hover {
+  transform: scale(1.12);
+  border-color: transparent;
+}
+
+/* Two stacked shadows rather than one: the inner one repaints a ring of the
+   panel's own background color first, opening a visible gap between the
+   swatch and the outer ring — without it, the ring would butt straight
+   against the swatch's own (often similarly saturated) fill and the two
+   would blur into one indistinct edge. Grey (--text-secondary) rather than
+   --accent: this ring means "this is the picked swatch", not a themed
+   action, and a blue ring around e.g. a blue swatch read as it doubling
+   that swatch's own color rather than as a separate selection indicator. */
+.color-picker__swatch.is-selected {
+  box-shadow:
+    0 0 0 2px var(--surface-panel),
+    0 0 0 4px var(--text-secondary);
+}
+
+/* The "revert to this kind's default color" swatch: deliberately not a
+   solid color chip like the rest of the row (it isn't picking a color, it's
+   clearing one), so it's drawn as an empty ring instead — the same visual
+   vocabulary a "no fill" swatch uses in most design tools. */
+.color-picker__swatch--default {
+  background: var(--surface-raised);
+  border: 1.5px dashed var(--border-strong);
+}
+
+.color-picker__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The browser/OS's own color dialog trigger — this *is* the "graphical
+   color selector": a swatch button that opens a full hue/saturation picker
+   on click, with no custom canvas-based picker to build or maintain. */
+.color-picker__native {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-input);
+  cursor: pointer;
+}
+
+/* Cross-browser reset for the color swab a native color input paints
+   inside itself, so it fills this button's own padded box edge-to-edge
+   instead of leaving the UA's own inset border around a smaller square. */
+.color-picker__native::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-picker__native::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.color-picker__hex {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  text-transform: lowercase;
 }

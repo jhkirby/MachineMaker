@@ -9,6 +9,7 @@ import { useEffect, useRef } from "react";
 import ComponentPalette from "./components/ComponentPalette";
 import DiagramCanvas, { type CanvasHandle } from "./components/DiagramCanvas";
 import InspectorPanel from "./components/InspectorPanel";
+import TitleBar from "./components/TitleBar";
 import Toolbar from "./components/Toolbar";
 import { useDiagramStore } from "./state/diagram-store";
 import { useDiagramCommands } from "./state/use-diagram-commands";
@@ -47,6 +48,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <TitleBar />
       <Toolbar commands={commands} />
       <div
         className={`app__body${

@@ -26,6 +26,16 @@
   --accent-hover: #6fb2ff;
   --danger: #e0655f;
 
+  /* The soft halo behind an armed/connectable/incompatible port ring (see
+     .rtl-port--armed etc. in app.css) — kept as its own token, at a fixed
+     alpha, rather than computed from --accent/--danger at render time (plain
+     CSS has no color-mix() fallback old enough to rely on here), so it can
+     still track each theme's own accent/danger hue instead of the one
+     hardcoded rgb() a straight copy-paste would freeze in regardless of
+     theme. Must be kept in the same rgb() as --accent/--danger above. */
+  --accent-glow: rgba(76, 159, 254, 0.35);
+  --danger-glow: rgba(224, 101, 95, 0.35);
+
   /* A flat light grey for icon buttons, menu triggers, and palette cards to
      highlight to on hover (unlike --surface-hover, which is a per-theme
      elevation tint) so hover always reads as an unmistakable "light grey",
@@ -34,6 +44,24 @@
      against this theme's much darker surfaces, the same light-mode grey
      read as too bright/washed-out by comparison. */
   --hover-highlight: #a8aeb9;
+
+  /* A port's (and clk triangle's) own hover fill — plain --surface-hover
+     here, same as this app's original look: against this theme's much
+     darker canvas, --surface-hover's shift off --surface-canvas already
+     reads clearly. Light mode redefines this to --hover-highlight instead
+     (below) rather than reusing --surface-hover there too, where the two
+     sit only a few shades apart and the hover was going unnoticed. */
+  --port-hover-fill: var(--surface-hover);
+
+  /* React Flow's own rubber-band drag rectangle (.react-flow__selection,
+     app.css) ships a blue default and a grey default, switched by its own
+     light/dark split rather than anything here — pinned to a neutral grey
+     in both, via these two tokens, so it reads the same regardless of app
+     theme. This dark-mode grey is light against the dark canvas; light
+     mode needs a genuinely different (darker) grey for the same contrast
+     against its own light canvas, not just this value reused verbatim. */
+  --selection-fill: rgba(200, 200, 220, 0.08);
+  --selection-border: rgba(200, 200, 220, 0.8);
 
   /* Spacing scale. */
   --space-1: 4px;
@@ -44,6 +72,7 @@
 
   /* Structure. */
   --radius: 6px;
+  --titlebar-height: 32px;
   --toolbar-height: 48px;
   --sidebar-width: 232px;
   --sidebar-rail-width: 40px;
@@ -77,5 +106,22 @@
   --accent-hover: #1f5bc4;
   --danger: #c8433c;
 
+  /* Matching rgb()s to this theme's own --accent/--danger above — see the
+     dark-mode definition's comment for why these can't just be computed
+     from them directly. */
+  --accent-glow: rgba(47, 111, 224, 0.35);
+  --danger-glow: rgba(200, 67, 60, 0.35);
+
   --hover-highlight: #cbd0d9;
+
+  /* --surface-hover sits only a few shades from --surface-canvas in this
+     theme, which read as barely-there on a port's small circle — this
+     theme's own --hover-highlight is the same unmistakable grey the
+     toolbar/palette already hover to, so it doubles as this instead. */
+  --port-hover-fill: var(--hover-highlight);
+
+  /* A darker, more saturated grey than the dark-mode default above — against
+     this theme's light canvas, that lighter grey read as barely-there. */
+  --selection-fill: rgba(90, 90, 100, 0.14);
+  --selection-border: rgba(90, 90, 100, 0.75);
 }

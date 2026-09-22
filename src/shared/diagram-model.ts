@@ -107,6 +107,12 @@ export interface RtlBlock {
   width: number;
   height: number;
   ports: RtlPort[];
+  /**
+   * Custom accent color (`#rrggbb`), replacing the kind's default palette
+   * (see resolvePalette in model/block-appearance.ts). Omitted means the
+   * block still uses its kind's default color.
+   */
+  color?: string;
 }
 
 /** A wire between two ports. */

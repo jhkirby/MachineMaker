@@ -13,7 +13,7 @@ import {
   type RtlBlock,
   type RtlPort,
 } from "../../../../shared/diagram-model";
-import { paletteFor } from "../../model/block-appearance";
+import { resolvePalette, withAlpha } from "../../model/block-appearance";
 import { GRID_SIZE } from "../../model/grid";
 import {
   resolvePortPairConnection,
@@ -122,13 +122,28 @@ function portLayout(
   const horizontal = port.side === "left" || port.side === "right";
   const along = `${port.slot * portPitchCells(block, port.side) * GRID_SIZE}px`;
   const inset = isClock ? CLOCK_TRIANGLE_DEPTH + CLOCK_LABEL_GAP : horizontal ? 10 : 8;
+  // translateZ(0) alongside the real positioning translate promotes this
+  // label onto its own GPU layer permanently, from its very first render —
+  // deliberately not toggled by anything hover-driven, unlike the filter()
+  // .rtl-block::before's own comment describes and avoids for that exact
+  // reason: a layer that only appears right as a transition starts forces a
+  // fresh rasterization of whatever's on it at that instant, reading as a
+  // visible jump. The block's own hover-lighten (::before) and a port's
+  // hover transitions (background/box-shadow/border-color, all on
+  // .rtl-port) repaint the pixels directly behind/beside this label on
+  // every frame they run; without its own stable layer, Chromium was
+  // re-rasterizing this label's glyphs right along with them each time —
+  // most visible in dark mode, where the swing from a near-black fill to
+  // the hover-lighten tint is largest. Promoted once up front, this label's
+  // glyphs rasterize a single time, and every later frame is a cheap
+  // recomposite instead, regardless of what changes around it.
   if (horizontal) {
     return {
       handle: { top: along },
       label: {
         top: along,
         [port.side]: inset,
-        transform: "translateY(-50%)",
+        transform: "translateY(-50%) translateZ(0)",
         textAlign: port.side === "left" ? "left" : "right",
       } as React.CSSProperties,
     };
@@ -138,7 +153,7 @@ function portLayout(
     label: {
       left: along,
       [port.side]: inset,
-      transform: "translateX(-50%)",
+      transform: "translateX(-50%) translateZ(0)",
       textAlign: "center",
     } as React.CSSProperties,
   };
@@ -159,7 +174,7 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
   // fields like `className`/`zIndex` — see the "DRAG INVALID PLACEMENT" rule
   // in app.css for the actual override.
   const theme = useDiagramStore((s) => s.theme);
-  const palette = paletteFor(block.kind, theme);
+  const palette = resolvePalette(block, theme);
 
   const diagram = useDiagramStore((s) => s.diagram);
   const armedPort = useDiagramStore((s) => s.armedPort);
@@ -207,6 +222,10 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
           // (keeping their click-to-connect hit-testing intact) while still
           // landing exactly on the grid.
           "--block-stroke": palette.stroke,
+          // A translucent version of the same stroke, for the armed/
+          // connectable port glow (app.css) — so that halo is always this
+          // block's own color, not a second, unrelated one.
+          "--block-stroke-glow": withAlpha(palette.stroke, 0.35),
           color: palette.text,
         } as React.CSSProperties
       }
@@ -230,12 +249,18 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
             blockId: block.id,
             portId: port.id,
           }) !== null;
+        // Every other port while one is armed: wrong direction, or a
+        // mismatched bus width (see resolvePortPairConnection) — a click
+        // here can never complete the connection, so hovering it warns
+        // rather than echoing the armed port's own "this would work" glow.
+        const isIncompatible = !!armedPort && !isArmed && !isConnectable;
         const portClassName = [
           "rtl-port",
           `rtl-port--${port.direction}`,
           isClock ? "rtl-port--clock" : "",
           isArmed ? "rtl-port--armed" : "",
           isConnectable ? "rtl-port--connectable" : "",
+          isIncompatible ? "rtl-port--incompatible" : "",
         ]
           .filter(Boolean)
           .join(" ");

@@ -74,11 +74,14 @@ export const COMPONENT_LIBRARY: readonly ComponentTemplate[] = [
     hint: "Edge-triggered flip-flop / pipeline register",
     defaultWidth: cells(10),
     defaultHeight: cells(8),
-    // clk's slot here is provisional, same as a module's — normalizeFixedPorts
-    // (model/port-layout.ts) pins it to the bottom of the left edge right
-    // after the block is stamped out.
+    // clk and reset's slots here are provisional, same as a module's —
+    // normalizeFixedPorts (model/port-layout.ts) pins them to their fixed
+    // corners right after the block is stamped out. Every register carries
+    // both, same as a sequential module — a register is inherently
+    // edge-triggered, so unlike a module's, this reset is never optional.
     ports: [
       { name: "clk", side: "left", direction: "in", slot: 2 },
+      { name: "reset", side: "bottom", direction: "in", slot: 1 },
       { name: "d", side: "left", direction: "in", slot: 4, width: 32 },
       { name: "q", side: "right", direction: "out", slot: 4, width: 32 },
     ],
@@ -88,15 +91,15 @@ export const COMPONENT_LIBRARY: readonly ComponentTemplate[] = [
     displayName: "I/O Port",
     baseName: "Port",
     hint: "Top-level input or output pin",
-    defaultWidth: cells(8),
+    defaultWidth: cells(10),
     defaultHeight: cells(4),
-    ports: [{ name: "pin", side: "right", direction: "out", slot: 2, width: 32 }],
+    ports: [{ name: "pin", side: "right", direction: "out", slot: 2 }],
   },
   {
     kind: "constant",
     displayName: "Constant",
     hint: "Tie-off / literal value",
-    defaultWidth: cells(6),
+    defaultWidth: cells(10),
     defaultHeight: cells(4),
     ports: [{ name: "val", side: "right", direction: "out", slot: 2 }],
   },

@@ -25,6 +25,28 @@ import { measurePortLabelWidth } from "./text-measure";
 export const MIN_BLOCK_CELLS = 3;
 
 /**
+ * Smallest a module or register may ever be, in grid cells, regardless of
+ * how few ports it currently has — both kinds always carry at least a clk
+ * (and, per {@link pinsReset}, a reset too), so shrinking to the generic
+ * {@link MIN_BLOCK_CELLS} floor would already crowd those two labels; this
+ * is simply the component library's own default size (see
+ * COMPONENT_LIBRARY in component-library.ts) promoted to a hard floor
+ * neither kind can be resized below.
+ */
+const MODULE_REGISTER_MIN_WIDTH_CELLS = 10;
+const MODULE_REGISTER_MIN_HEIGHT_CELLS = 8;
+
+/**
+ * Smallest an I/O port or constant may ever be, in grid cells — the same
+ * idea as {@link MODULE_REGISTER_MIN_WIDTH_CELLS}/
+ * {@link MODULE_REGISTER_MIN_HEIGHT_CELLS} but for the two single-port kinds,
+ * which would otherwise float down toward the generic {@link MIN_BLOCK_CELLS}
+ * floor and read as cramped next to a module or register on the same canvas.
+ */
+const IO_CONSTANT_MIN_WIDTH_CELLS = 10;
+const IO_CONSTANT_MIN_HEIGHT_CELLS = 4;
+
+/**
  * Extra cells reserved for the header (name + kind label), on top of
  * whatever its left/right ports need — every block kind renders that header,
  * vertically centered, regardless of ports, and without this a block could
@@ -103,9 +125,37 @@ function pinsClk(kind: RtlBlock["kind"]): boolean {
 }
 
 /**
+ * Whether a block kind pins its reset to the start (bottom-left) of the
+ * bottom edge — see {@link normalizeFixedPorts}. The same two kinds as
+ * {@link pinsClk}: a register is inherently edge-triggered, so — like a
+ * sequential module — it always carries a reset, never an optional one.
+ *
+ * @param kind - The block kind to check.
+ * @returns True if this kind pins reset.
+ */
+function pinsReset(kind: RtlBlock["kind"]): boolean {
+  return kind === "module" || kind === "register";
+}
+
+/**
+ * How far clk must be held back from the exact bottom-left corner: whenever
+ * a block also pins a reset to the *start* of the bottom edge — that same
+ * corner — it needs {@link CLK_BOTTOM_CLEARANCE_CELLS} to keep the two
+ * labels apart. A block with no reset has nothing to collide with, so its
+ * clk pins to the true last slot instead of losing cells to a collision that
+ * can't happen.
+ *
+ * @param block - The block to inspect.
+ * @returns The clearance, in cells, to hold clk back by.
+ */
+function clkCornerClearanceCells(block: RtlBlock): number {
+  return block.ports.some(isResetPort) ? CLK_BOTTOM_CLEARANCE_CELLS : 0;
+}
+
+/**
  * Extra height a block needs so its clk — pinned to the far end of the left
  * edge (see normalizeFixedPorts) — always lands with
- * {@link CLK_BOTTOM_CLEARANCE_CELLS} cells of clearance below it, even when
+ * {@link clkCornerClearanceCells} cells of clearance below it, even when
  * enough other left ports would otherwise pack it in right at the last
  * interior point. minBlockSize folds this in directly rather than leaving it
  * to pinToEdge's own placement, which only *tries* for that clearance and
@@ -126,7 +176,7 @@ function clkClearanceHeightCells(block: RtlBlock): number {
   }
   const otherLeftCount = portsOnSide(block, "left") - 1;
   const packedSlot = minSlotForSide(block, "left") + otherLeftCount;
-  return packedSlot + 1 + CLK_BOTTOM_CLEARANCE_CELLS;
+  return packedSlot + 1 + clkCornerClearanceCells(block);
 }
 
 /**
@@ -170,9 +220,16 @@ export function minBlockSize(block: RtlBlock): {
 } {
   const topPitch = portPitchCells(block, "top");
   const bottomPitch = portPitchCells(block, "bottom");
+  // Modules and registers (pinsClk's own two kinds) never shrink below their
+  // library default, on top of whatever their current ports demand — and
+  // I/O ports/constants have their own, smaller floor for the same reason.
+  const fixedMinCells = pinsClk(block.kind);
+  const isIoOrConstant = block.kind === "io" || block.kind === "constant";
   const widthCells = Math.max(
     MIN_BLOCK_CELLS,
     HEADER_MIN_WIDTH_CELLS,
+    fixedMinCells ? MODULE_REGISTER_MIN_WIDTH_CELLS : 0,
+    isIoOrConstant ? IO_CONSTANT_MIN_WIDTH_CELLS : 0,
     // The trailing term isn't the usual flat "+1": every port's label is
     // centered on its dot and sized to use up to half its own pitch cell on
     // each side (portPitchCells' whole point), but the *last* port on a side
@@ -186,6 +243,8 @@ export function minBlockSize(block: RtlBlock): {
   const heightCells = Math.max(
     MIN_BLOCK_CELLS,
     HEADER_RESERVE_CELLS + 1,
+    fixedMinCells ? MODULE_REGISTER_MIN_HEIGHT_CELLS : 0,
+    isIoOrConstant ? IO_CONSTANT_MIN_HEIGHT_CELLS : 0,
     // +1: left/right slots start just past topClearanceCells (see
     // minSlotForSide), so N ports there run up to slot
     // topClearanceCells + N, which itself needs one more cell of height to
@@ -315,12 +374,12 @@ function pinToEdge(
 
 /**
  * Pin a block's clock and reset to their fixed structural positions — clk
- * last (bottom-most) on the left edge (modules and registers both have a
- * clk to pin; see {@link pinsClk}), reset first (leftmost) on the bottom
- * edge (modules only — no other kind has a reset) — so neither can end up
- * somewhere else relative to a block's other ports, no matter what else
- * about the block just changed. Also forces both back to a plain 1-bit input
- * — the only shape either one is ever allowed to have — since that's a data
+ * last (bottom-most) on the left edge, reset first (leftmost) on the bottom
+ * edge — so neither can end up somewhere else relative to a block's other
+ * ports, no matter what else about the block just changed. Modules and
+ * registers both pin both (see {@link pinsClk} / {@link pinsReset}); no
+ * other kind has either. Also forces both back to a plain 1-bit input — the
+ * only shape either one is ever allowed to have — since that's a data
  * invariant this function is the sole enforcement point for, the same as
  * side: the inspector merely hides the controls that would otherwise let you
  * break it. A no-op for a port the block doesn't have, or a kind that pins
@@ -329,9 +388,23 @@ function pinToEdge(
  * @param block - The block to pin ports on; mutated in place.
  */
 export function normalizeFixedPorts(block: RtlBlock): void {
+  // An I/O port's or constant's single port is left/right only — see
+  // availableSides in InspectorPanel.tsx, which is what stops a diagram
+  // author from ever choosing top/bottom in the first place. This is the
+  // backstop for a side that arrived some other way (a loaded file authored
+  // before this rule, or the schema's own type not actually restricting the
+  // JSON on disk) — centerPortGroups (run right after this in the same
+  // commit) then re-slots it correctly for whichever side it lands on.
+  if (block.kind === "io" || block.kind === "constant") {
+    const port = block.ports[0];
+    if (port && port.side !== "left" && port.side !== "right") {
+      port.side = "right";
+    }
+  }
   const clk = pinsClk(block.kind) ? block.ports.find(isClockPort) : undefined;
-  const reset =
-    block.kind === "module" ? block.ports.find(isResetPort) : undefined;
+  const reset = pinsReset(block.kind)
+    ? block.ports.find(isResetPort)
+    : undefined;
   if (!clk && !reset) {
     return;
   }
@@ -346,11 +419,17 @@ export function normalizeFixedPorts(block: RtlBlock): void {
     reset.width = undefined;
   }
   if (clk) {
-    // Held back from the bottom-left corner (see clkClearanceHeightCells,
-    // which guarantees minBlockSize actually leaves room for it) so its
-    // label doesn't overlap "reset", which is pinned to the start of the
-    // bottom edge at that same corner.
-    pinToEdge(block, block.ports, "left", clk, "last", CLK_BOTTOM_CLEARANCE_CELLS);
+    // Held back from the bottom-left corner only when this block also pins a
+    // reset there (see clkCornerClearanceCells) — otherwise clk pins to the
+    // true bottom-left corner, with no reset label for it to avoid.
+    pinToEdge(
+      block,
+      block.ports,
+      "left",
+      clk,
+      "last",
+      clkCornerClearanceCells(block),
+    );
   }
   if (reset) {
     pinToEdge(block, block.ports, "bottom", reset, "first");
@@ -360,18 +439,19 @@ export function normalizeFixedPorts(block: RtlBlock): void {
 
 /**
  * The lowest slot {@link centerPortGroups} may place a side's regular ports
- * at — {@link minSlotForSide}'s usual floor, except on a module's bottom edge
- * where reset already occupies that floor, so the group starts one slot past
- * it instead of on top of it. In slot units throughout, same as `.slot`
- * itself (a plain per-port ordinal — see portPitchCells for how that then
- * maps to an actual pixel/cell position at render time).
+ * at — {@link minSlotForSide}'s usual floor, except on a reset-pinning
+ * block's bottom edge (see {@link pinsReset}) where reset already occupies
+ * that floor, so the group starts one slot past it instead of on top of it.
+ * In slot units throughout, same as `.slot` itself (a plain per-port ordinal
+ * — see portPitchCells for how that then maps to an actual pixel/cell
+ * position at render time).
  *
  * @param block - The owning block.
  * @param side - The side to bound.
  * @returns The lowest usable slot.
  */
 function minSlotBoundForSide(block: RtlBlock, side: PortSide): number {
-  if (side === "bottom" && block.kind === "module") {
+  if (side === "bottom" && pinsReset(block.kind)) {
     const reset = block.ports.find(isResetPort);
     if (reset && reset.side === "bottom") {
       return reset.slot + 1;

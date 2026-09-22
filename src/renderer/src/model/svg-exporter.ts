@@ -15,7 +15,7 @@ import {
 import {
   BUS_COLOR,
   WIRE_COLOR,
-  paletteFor,
+  resolvePalette,
 } from "./block-appearance";
 import { midpoint, portPosition, wirePath } from "./port-geometry";
 import type { Theme } from "../state/diagram-store";
@@ -109,7 +109,7 @@ export class SvgExporter {
    * @returns An SVG `<g>` fragment.
    */
   private renderBlock(block: RtlBlock): string {
-    const palette = paletteFor(block.kind, this.theme);
+    const palette = resolvePalette(block, this.theme);
     const parts: string[] = [
       `<rect x="${block.x}" y="${block.y}" width="${block.width}" height="${block.height}" ` +
         `rx="8" fill="${palette.fill}" stroke="${palette.stroke}" stroke-width="1.5"/>`,

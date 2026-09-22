@@ -114,6 +114,14 @@ export interface DiagramStore {
   moveBlock(id: string, x: number, y: number): void;
   updateBlockLabel(id: string, label: string): void;
   /**
+   * Set or clear a block's custom accent color.
+   *
+   * @param id - The block to recolor.
+   * @param color - A `#rrggbb` hex color, or undefined to revert to the
+   *   block's kind default (see resolvePalette in model/block-appearance.ts).
+   */
+  updateBlockColor(id: string, color: string | undefined): void;
+  /**
    * Live-preview a resize without its own undo step — same idea as
    * {@link moveBlock} during a drag: call {@link beginInteraction} once when
    * the edit starts, then this on every subsequent change, so a whole edit
@@ -300,6 +308,14 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         const block = draft.blocks.find((b) => b.id === id);
         if (block) {
           block.label = label;
+        }
+      }),
+
+    updateBlockColor: (id, color) =>
+      commit((draft) => {
+        const block = draft.blocks.find((b) => b.id === id);
+        if (block) {
+          block.color = color;
         }
       }),
 

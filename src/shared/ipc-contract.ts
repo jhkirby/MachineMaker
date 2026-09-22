@@ -16,6 +16,12 @@ export const IpcChannel = {
   OpenDiagram: "diagram:open",
   SaveDiagram: "diagram:save",
   ExportImage: "diagram:export-image",
+  WindowMinimize: "window:minimize",
+  WindowToggleMaximize: "window:toggle-maximize",
+  WindowClose: "window:close",
+  WindowIsMaximized: "window:is-maximized",
+  /** Main → renderer push, sent whenever the window's maximized state flips. */
+  WindowMaximizedChanged: "window:maximized-changed",
 } as const;
 
 /** Result of an open/save dialog flow. */
@@ -72,4 +78,19 @@ export interface RtlBridgeApi {
   openDiagram(): Promise<FileDialogResult<RtlDiagram>>;
   saveDiagram(req: SaveDiagramRequest): Promise<FileDialogResult<RtlDiagram>>;
   exportImage(req: ExportImageRequest): Promise<FileDialogResult<never>>;
+
+  /** True on Windows/Linux where the app draws its own titlebar buttons. */
+  platform: NodeJS.Platform;
+  windowMinimize(): Promise<void>;
+  windowToggleMaximize(): Promise<void>;
+  windowClose(): Promise<void>;
+  isWindowMaximized(): Promise<boolean>;
+  /**
+   * Subscribe to maximize/restore changes driven from outside the custom
+   * titlebar (double-clicking the drag region, Win+Up, snap gestures).
+   *
+   * @param callback - Invoked with the new maximized state.
+   * @returns Unsubscribe function.
+   */
+  onWindowMaximizedChange(callback: (maximized: boolean) => void): () => void;
 }

@@ -16,10 +16,13 @@ import {
   type RtlPort,
   type RtlWire,
 } from "../../../shared/diagram-model";
+import { paletteFor, resolvePalette, withAlpha } from "../model/block-appearance";
 import { GRID_SIZE } from "../model/grid";
 import { minBlockSize } from "../model/port-layout";
 import { useDiagramStore } from "../state/diagram-store";
+import ColorPicker from "./ColorPicker";
 import CommitInput from "./CommitInput";
+import Dropdown from "./Dropdown";
 import NameInput from "./NameInput";
 import NumericField from "./NumericField";
 
@@ -96,7 +99,9 @@ function DocumentInspector() {
  */
 function BlockInspector({ block }: { block: RtlBlock }) {
   const blocks = useDiagramStore((s) => s.diagram.blocks);
+  const theme = useDiagramStore((s) => s.theme);
   const updateBlockLabel = useDiagramStore((s) => s.updateBlockLabel);
+  const updateBlockColor = useDiagramStore((s) => s.updateBlockColor);
   const previewResizeBlock = useDiagramStore((s) => s.previewResizeBlock);
   const beginInteraction = useDiagramStore((s) => s.beginInteraction);
   const addPort = useDiagramStore((s) => s.addPort);
@@ -113,7 +118,8 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   // free-form signal: it's always a plain 1-bit input pinned to a fixed edge
   // (see normalizeFixedPorts, which enforces the same for direction/width),
   // never something a diagram author is choosing the shape of. Side,
-  // direction, width, and the remove button all key off this.
+  // direction, and width all key off this (see canRemovePort, below, for
+  // the separate — broader — rule on the remove button).
   const isClockOrReset = (port: RtlPort): boolean =>
     (block.kind === "module" || block.kind === "register") &&
     (isClockPort(port) || isResetPort(port));
@@ -134,6 +140,26 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   // clock edge or a reset level.
   const hasFixedWidth = isClockOrReset;
 
+  // A module's own arbitrary ports (added via the "+ Port" button below) are
+  // the only ones a diagram author can ever remove. Everything else —
+  // clk/reset, a register's d/q, and an I/O port's or constant's single
+  // defining port — is structural: the block would be meaningless without
+  // it, and (unlike a module) neither io nor constant offers any way to add
+  // a replacement.
+  const canRemovePort = (port: RtlPort): boolean =>
+    block.kind === "module" && !hasFixedDirection(port);
+
+  // An I/O port or constant has exactly one signal flowing in one direction
+  // (out, in this app) — top/bottom read as a bus entering or leaving a
+  // module's face, a convention that only means something for a block with
+  // more than one port to arrange. Restricted here, at the option list
+  // itself, rather than merely accepted-then-normalized, so the choice never
+  // appears in the first place.
+  const availableSides: readonly PortSide[] =
+    block.kind === "io" || block.kind === "constant"
+      ? (["left", "right"] as const)
+      : SIDES;
+
   // The floor a resize can't go below given the block's current ports and
   // header — depends on the block itself, so it's recomputed on every
   // render rather than read off a fixed prop.
@@ -141,8 +167,27 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   const minWidthCells = Math.round(min.width / GRID_SIZE);
   const minHeightCells = Math.round(min.height / GRID_SIZE);
 
+  // This block's actual current color (custom, or its kind's default) — set
+  // as --block-stroke (and a translucent --block-stroke-glow, for a Dropdown
+  // panel's lighter hover/active rows) on the section below, so every
+  // focused/active control inside it (the mode toggle, a focused port-table
+  // input, an open Side dropdown) matches the block on canvas instead of a
+  // fixed blue unrelated to it. Unlike RtlBlockNode's own --block-stroke,
+  // this doesn't inherit down from anywhere: the inspector panel sits
+  // outside the canvas's DOM tree entirely, so both have to be set again
+  // here from the same source of truth, once, for the whole section to read.
+  const strokeColor = resolvePalette(block, theme).stroke;
+
   return (
-    <div className="inspector__section">
+    <div
+      className="inspector__section"
+      style={
+        {
+          "--block-stroke": strokeColor,
+          "--block-stroke-glow": withAlpha(strokeColor, 0.35),
+        } as React.CSSProperties
+      }
+    >
       <label className="field">
         <span>Name</span>
         <NameInput
@@ -254,20 +299,14 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                   {port.side}
                 </span>
               ) : (
-                <select
+                <Dropdown<PortSide>
                   value={port.side}
-                  onChange={(event) =>
-                    updatePort(block.id, port.id, {
-                      side: event.target.value as PortSide,
-                    })
+                  options={availableSides}
+                  ariaLabel="Port side"
+                  onChange={(side) =>
+                    updatePort(block.id, port.id, { side })
                   }
-                >
-                  {SIDES.map((side) => (
-                    <option key={side} value={side}>
-                      {side}
-                    </option>
-                  ))}
-                </select>
+                />
               )}
               {hasFixedDirection(port) ? (
                 <span
@@ -281,20 +320,14 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                   {port.direction}
                 </span>
               ) : (
-                <select
+                <Dropdown<PortDirection>
                   value={port.direction}
-                  onChange={(event) =>
-                    updatePort(block.id, port.id, {
-                      direction: event.target.value as PortDirection,
-                    })
+                  options={DIRECTIONS}
+                  ariaLabel="Port direction"
+                  onChange={(direction) =>
+                    updatePort(block.id, port.id, { direction })
                   }
-                >
-                  {DIRECTIONS.map((direction) => (
-                    <option key={direction} value={direction}>
-                      {direction}
-                    </option>
-                  ))}
-                </select>
+                />
               )}
               {hasFixedWidth(port) ? (
                 <span
@@ -317,9 +350,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                   }
                 />
               )}
-              {hasFixedDirection(port) ? (
-                <span aria-hidden="true" />
-              ) : (
+              {canRemovePort(port) ? (
                 <button
                   type="button"
                   className="port-row__remove"
@@ -328,6 +359,8 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                 >
                   ×
                 </button>
+              ) : (
+                <span aria-hidden="true" />
               )}
             </li>
           ))}
@@ -341,6 +374,13 @@ function BlockInspector({ block }: { block: RtlBlock }) {
           </button>
         </div>
       ) : null}
+
+      <h3 className="inspector__subheading">Color</h3>
+      <ColorPicker
+        value={block.color}
+        defaultColor={paletteFor(block.kind, theme).stroke}
+        onChange={(color) => updateBlockColor(block.id, color)}
+      />
     </div>
   );
 }

@@ -20,6 +20,20 @@ const api: RtlBridgeApi = {
     ipcRenderer.invoke(IpcChannel.SaveDiagram, request),
   exportImage: (request: ExportImageRequest) =>
     ipcRenderer.invoke(IpcChannel.ExportImage, request),
+
+  platform: process.platform,
+  windowMinimize: () => ipcRenderer.invoke(IpcChannel.WindowMinimize),
+  windowToggleMaximize: () =>
+    ipcRenderer.invoke(IpcChannel.WindowToggleMaximize),
+  windowClose: () => ipcRenderer.invoke(IpcChannel.WindowClose),
+  isWindowMaximized: () => ipcRenderer.invoke(IpcChannel.WindowIsMaximized),
+  onWindowMaximizedChange: (callback: (maximized: boolean) => void) => {
+    const listener = (_event: unknown, maximized: boolean) =>
+      callback(maximized);
+    ipcRenderer.on(IpcChannel.WindowMaximizedChanged, listener);
+    return () =>
+      ipcRenderer.removeListener(IpcChannel.WindowMaximizedChanged, listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("rtl", api);

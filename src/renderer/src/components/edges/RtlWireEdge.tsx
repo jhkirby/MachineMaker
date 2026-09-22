@@ -13,10 +13,11 @@ import {
 } from "@xyflow/react";
 import {
   BUS_COLOR,
-  SELECTION_COLOR,
+  selectionColorFor,
   WIRE_COLOR,
 } from "../../model/block-appearance";
 import type { RtlWireEdge as RtlWireEdgeType } from "../../model/flow-adapters";
+import { useDiagramStore } from "../../state/diagram-store";
 import { midpointOfPolyline, routeToPath } from "../../model/wire-router";
 
 /**
@@ -38,10 +39,15 @@ export default function RtlWireEdge({
   data,
   selected,
 }: EdgeProps<RtlWireEdgeType>) {
+  const theme = useDiagramStore((s) => s.theme);
   const wire = data?.wire;
   const route = data?.route;
   const isBus = Boolean(data?.isBus);
-  const color = selected ? SELECTION_COLOR : isBus ? BUS_COLOR : WIRE_COLOR;
+  const color = selected
+    ? selectionColorFor(theme)
+    : isBus
+      ? BUS_COLOR
+      : WIRE_COLOR;
   const strokeWidth = isBus ? 3 : 1.5;
 
   let path: string;

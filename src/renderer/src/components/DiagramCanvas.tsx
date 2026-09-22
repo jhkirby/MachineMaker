@@ -40,7 +40,13 @@ import ComponentIcon from "./ComponentIcon";
 import { PALETTE_DRAG_TYPE } from "./ComponentPalette";
 import RtlBlockNode from "./nodes/RtlBlockNode";
 import RtlWireEdge from "./edges/RtlWireEdge";
-import { BUS_COLOR, INVALID_PLACEMENT_PALETTE, WIRE_COLOR, paletteFor } from "../model/block-appearance";
+import {
+  BUS_COLOR,
+  INVALID_PLACEMENT_PALETTE,
+  WIRE_COLOR,
+  paletteFor,
+  resolvePalette,
+} from "../model/block-appearance";
 import { collidesWithOtherBlocks } from "../model/collision";
 import { templateFor } from "../model/component-library";
 import {
@@ -639,8 +645,8 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
           maskColor={
             theme === "dark" ? "rgba(10, 11, 14, 0.6)" : "rgba(20, 22, 27, 0.25)"
           }
-          nodeColor={(node) => paletteFor(node.data.block.kind, theme).fill}
-          nodeStrokeColor={(node) => paletteFor(node.data.block.kind, theme).stroke}
+          nodeColor={(node) => resolvePalette(node.data.block, theme).fill}
+          nodeStrokeColor={(node) => resolvePalette(node.data.block, theme).stroke}
           nodeStrokeWidth={3}
           nodeBorderRadius={2}
         />

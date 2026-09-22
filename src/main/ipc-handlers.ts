@@ -48,6 +48,22 @@ export class IpcHandlers {
       (_event: IpcMainInvokeEvent, request: ExportImageRequest) =>
         this.files.exportImage(this.requireWindow(), request),
     );
+
+    ipcMain.handle(IpcChannel.WindowMinimize, () =>
+      this.requireWindow().minimize(),
+    );
+    ipcMain.handle(IpcChannel.WindowToggleMaximize, () => {
+      const window = this.requireWindow();
+      if (window.isMaximized()) {
+        window.unmaximize();
+      } else {
+        window.maximize();
+      }
+    });
+    ipcMain.handle(IpcChannel.WindowClose, () => this.requireWindow().close());
+    ipcMain.handle(IpcChannel.WindowIsMaximized, () =>
+      this.requireWindow().isMaximized(),
+    );
   }
 
   /**
