@@ -66,6 +66,14 @@
      sit only a few shades apart and the hover was going unnoticed. */
   --port-hover-fill: var(--surface-hover);
 
+  /* A block's own hover tint (.rtl-block::before, app.css) — plain white,
+     since every block's fill is a dark, near-black-blend color in this
+     theme (see resolvePalette in block-appearance.ts), so lightening it a
+     touch reads clearly. Light mode redefines this to black instead
+     (below): that same lighten direction, against a fill that's already a
+     pale tint close to white, was barely perceptible. */
+  --block-hover-tint: #fff;
+
   /* React Flow's own rubber-band drag rectangle (.react-flow__selection,
      app.css) ships a blue default and a grey default, switched by its own
      light/dark split rather than anything here — pinned to a neutral grey
@@ -140,6 +148,11 @@
      theme's own --hover-highlight is the same unmistakable grey the
      toolbar/palette already hover to, so it doubles as this instead. */
   --port-hover-fill: var(--hover-highlight);
+
+  /* Darkens instead of lightens — this theme's block fills are already pale
+     tints close to white, so the dark-mode default (white, further up)
+     barely moved them. */
+  --block-hover-tint: #000;
 
   /* A darker, more saturated grey than the dark-mode default above — against
      this theme's light canvas, that lighter grey read as barely-there. */

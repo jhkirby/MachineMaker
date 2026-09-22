@@ -664,14 +664,17 @@ input.is-invalid:focus {
    subtree (including the text below) into a new compositing layer on
    hover-enter/exit; text glyphs get rasterized slightly differently once
    layered, which reads as the label "jumping" a pixel on hover. This
-   pseudo-element paints the same lightening effect without ever touching
-   the text's layer, so nothing inside the block moves. */
+   pseudo-element paints the same lighten/darken effect without ever
+   touching the text's layer, so nothing inside the block moves.
+   --block-hover-tint (tokens.css) flips direction per theme: white in dark
+   mode, black in light mode — a fixed white-only tint was barely visible
+   against light mode's already-pale block fills. */
 .rtl-block::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: #fff;
+  background: var(--block-hover-tint);
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
