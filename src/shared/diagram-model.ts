@@ -30,6 +30,17 @@ export type BlockKind = "module" | "register" | "io" | "constant" | "gate";
  */
 export type GateType = "AND" | "NAND" | "OR" | "NOR" | "XOR" | "XNOR";
 
+/**
+ * Which way a `"gate"` block's symbol (and its output) points — chosen from
+ * the "Rotation" button group under Gate Type (InspectorPanel.tsx).
+ * `"right"` is the default a fresh gate is created with: inputs on the left,
+ * output on the right. Drives both the drawn symbol's orientation
+ * (RtlBlockNode.tsx's GateSymbol) and which side every port is pinned to
+ * (normalizeFixedPorts in model/port-layout.ts) — meaningless on any other
+ * kind.
+ */
+export type GateRotation = "up" | "down" | "left" | "right";
+
 /** File format version, bumped when {@link RtlDiagram} changes incompatibly. */
 export const DIAGRAM_SCHEMA_VERSION = 3 as const;
 
@@ -202,6 +213,12 @@ export interface RtlBlock {
    * model/component-library.ts). Omitted on every other kind.
    */
   gateType?: GateType;
+  /**
+   * Which way this block's symbol points — only meaningful when `kind` is
+   * `"gate"`, where it's always set (see createBlock in
+   * model/component-library.ts). Omitted on every other kind.
+   */
+  gateRotation?: GateRotation;
 }
 
 /** A wire between two ports. */

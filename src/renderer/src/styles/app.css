@@ -651,6 +651,15 @@ input.is-invalid:focus {
     box-shadow 120ms ease;
 }
 
+/* A gate draws its own real outline (GateSymbol, RtlBlockNode.tsx) instead
+   of this generic rounded rect — background comes from the SVG's own
+   `fill`, and --block-outline (the rect's border, above) would otherwise
+   still show as a second, wrong rectangular outline around the real
+   AND/OR/XOR silhouette. */
+.rtl-block.is-gate {
+  box-shadow: none;
+}
+
 /* A `filter: brightness()` on the block itself would promote its whole
    subtree (including the text below) into a new compositing layer on
    hover-enter/exit; text glyphs get rasterized slightly differently once
@@ -706,6 +715,20 @@ input.is-invalid:focus {
   z-index: 1;
   border-radius: inherit;
   box-shadow: inset 0 0 0 3px var(--block-stroke, var(--accent));
+  pointer-events: none;
+}
+
+/* A gate shows its "selected" emphasis by thickening its own real outline
+   instead (GateSymbol's `selected` prop) — this rectangular ring would
+   otherwise draw right alongside that curved/D-shaped silhouette instead of
+   around it. */
+.rtl-block.is-gate.is-selected::after {
+  box-shadow: none;
+}
+
+/* Purely decorative (GateSymbol.tsx) — never the click/drag target itself,
+   so the real .rtl-block div underneath still gets the pointer events. */
+.gate-symbol {
   pointer-events: none;
 }
 

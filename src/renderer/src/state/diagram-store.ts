@@ -17,6 +17,7 @@ import {
   GATE_MIN_INPUTS,
   MAX_PORTS,
   type BlockKind,
+  type GateRotation,
   type GateType,
   type PortDirection,
   type PortSide,
@@ -153,6 +154,7 @@ export interface DiagramStore {
   removePort(blockId: string, portId: string): void;
   setModuleSequential(blockId: string, sequential: boolean): void;
   setGateType(blockId: string, gateType: GateType): void;
+  setGateRotation(blockId: string, gateRotation: GateRotation): void;
 
   // ── wires ──
   connect(connection: Connection): void;
@@ -504,6 +506,17 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         const block = draft.blocks.find((b) => b.id === blockId);
         if (block && block.kind === "gate") {
           block.gateType = gateType;
+        }
+      }),
+
+    // normalizeFixedPorts (run by commit() right after this) is what
+    // actually re-pins every port's side to match the new rotation — this
+    // just records the choice for it to read.
+    setGateRotation: (blockId, gateRotation) =>
+      commit((draft) => {
+        const block = draft.blocks.find((b) => b.id === blockId);
+        if (block && block.kind === "gate") {
+          block.gateRotation = gateRotation;
         }
       }),
 

@@ -14,6 +14,7 @@ import {
   isClockPort,
   isResetPort,
   portLabelText,
+  type GateRotation,
   type PortSide,
   type RtlBlock,
   type RtlPort,
@@ -387,6 +388,33 @@ function pinToEdge(
  *
  * @param block - The block to pin ports on; mutated in place.
  */
+/**
+ * Which side a gate's inputs and output sit on for a given rotation — the
+ * default `"right"` matches this app's original fixed layout (inputs left,
+ * output right); the other three rotate that 90°/180° at a time. Read by
+ * {@link normalizeFixedPorts} to pin every gate port's side, and by
+ * GateSymbol (RtlBlockNode.tsx) to orient the drawn symbol the same way, so
+ * the two can never drift out of sync with each other.
+ *
+ * @param rotation - The gate's chosen rotation.
+ * @returns Which side the inputs, and which side the output, sit on.
+ */
+export function gateSidesFor(
+  rotation: GateRotation,
+): { input: PortSide; output: PortSide } {
+  switch (rotation) {
+    case "left":
+      return { input: "right", output: "left" };
+    case "up":
+      return { input: "bottom", output: "top" };
+    case "down":
+      return { input: "top", output: "bottom" };
+    case "right":
+    default:
+      return { input: "left", output: "right" };
+  }
+}
+
 export function normalizeFixedPorts(block: RtlBlock): void {
   // An I/O port's or constant's single port is left/right only — see
   // availableSides in InspectorPanel.tsx, which is what stops a diagram
@@ -412,12 +440,19 @@ export function normalizeFixedPorts(block: RtlBlock): void {
   if (block.kind === "gate") {
     const output =
       block.ports.find((port) => port.direction === "out") ?? block.ports[0];
+    const sides = gateSidesFor(block.gateRotation ?? "right");
     block.ports.forEach((port) => {
       port.direction = port === output ? "out" : "in";
       // A gate's ports are always plain 1-bit signals — see the Ports table
       // in InspectorPanel.tsx, which doesn't even offer a Width column for
       // this kind.
       port.width = undefined;
+      // Which side is fixed by the Rotation control (InspectorPanel.tsx)
+      // rather than freely chosen per port — a gate's drawn symbol (see
+      // GateSymbol, RtlBlockNode.tsx) has one input face and one output
+      // face, so an individually-repositioned port wouldn't have anywhere
+      // on the actual shape to attach to any more.
+      port.side = port === output ? sides.output : sides.input;
     });
   }
   const clk = pinsClk(block.kind) ? block.ports.find(isClockPort) : undefined;

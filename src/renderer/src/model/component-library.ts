@@ -192,6 +192,7 @@ export function createBlock(
   };
   if (kind === "gate") {
     block.gateType = "AND";
+    block.gateRotation = "right";
   }
   return block;
 }

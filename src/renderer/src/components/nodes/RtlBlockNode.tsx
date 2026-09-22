@@ -22,6 +22,7 @@ import {
 } from "../../model/flow-adapters";
 import { portPitchCells } from "../../model/port-layout";
 import { useDiagramStore } from "../../state/diagram-store";
+import GateSymbol from "./GateSymbol";
 
 /** Gap, in px, between the clock triangle and its label. */
 const CLOCK_LABEL_GAP = 6;
@@ -206,12 +207,20 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
     [armedPort, block.id, connect, diagram, setArmedPort],
   );
 
+  const isGate = block.kind === "gate";
+
   return (
     <div
-      className={`rtl-block${selected ? " is-selected" : ""}`}
+      className={`rtl-block${isGate ? " is-gate" : ""}${selected ? " is-selected" : ""}`}
       style={
         {
-          background: palette.fill,
+          // A gate draws its own filled/stroked outline (GateSymbol, below)
+          // instead of this div's usual plain rounded rect — see the
+          // .rtl-block.is-gate rule (app.css) that blanks out `background`
+          // and `--block-outline` there, since a real AND/OR/XOR silhouette
+          // painted underneath a still-visible rectangular fill+border would
+          // just show as a second, wrong outline around the real one.
+          background: isGate ? undefined : palette.fill,
           // Read by the CSS `--block-outline` custom property (app.css,
           // "INSPECTOR" — see the `.rtl-block` rule) rather than the `border`
           // shorthand: a real `border` insets the padding box every handle
@@ -230,6 +239,18 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
         } as React.CSSProperties
       }
     >
+      {isGate ? (
+        <GateSymbol
+          type={block.gateType ?? "AND"}
+          rotation={block.gateRotation ?? "right"}
+          width={block.width}
+          height={block.height}
+          fill={palette.fill}
+          stroke={palette.stroke}
+          selected={!!selected}
+        />
+      ) : null}
+
       <div className="rtl-block__header">
         <div className="rtl-block__title">{block.label}</div>
         <div className="rtl-block__kind" style={{ color: palette.stroke }}>

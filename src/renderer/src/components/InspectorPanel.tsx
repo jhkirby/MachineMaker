@@ -15,6 +15,7 @@ import {
   isClockPort,
   isResetPort,
   portDirectionSummary,
+  type GateRotation,
   type GateType,
   type PortDirection,
   type PortSide,
@@ -35,6 +36,7 @@ import NumericField from "./NumericField";
 const SIDES: PortSide[] = ["left", "right", "top", "bottom"];
 const DIRECTIONS: PortDirection[] = ["in", "out", "inout"];
 const GATE_TYPES: GateType[] = ["AND", "NAND", "OR", "NOR", "XOR", "XNOR"];
+const GATE_ROTATIONS: GateRotation[] = ["up", "down", "left", "right"];
 
 /**
  * Right sidebar. Shows properties for the current single selection (block or
@@ -116,6 +118,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   const removePort = useDiagramStore((s) => s.removePort);
   const setModuleSequential = useDiagramStore((s) => s.setModuleSequential);
   const setGateType = useDiagramStore((s) => s.setGateType);
+  const setGateRotation = useDiagramStore((s) => s.setGateRotation);
 
   const otherBlockNames = blocks
     .filter((b) => b.id !== block.id)
@@ -134,8 +137,12 @@ function BlockInspector({ block }: { block: RtlBlock }) {
 
   // The side selector would otherwise let you pick a side that just snaps
   // back on the next render, so it's replaced with plain text instead of
-  // left interactively pointless.
-  const hasFixedPosition = isClockOrReset;
+  // left interactively pointless. A gate's ports are the same way, just
+  // driven by a different control (Rotation, below, rather than clk/reset's
+  // fixed corners) — see normalizeFixedPorts, which is what actually pins
+  // every gate port's side to match.
+  const hasFixedPosition = (port: RtlPort): boolean =>
+    isClockOrReset(port) || block.kind === "gate";
 
   // A register's d/q are its whole reason for existing — an edge-triggered
   // flip-flop always latches d, driving q — so unlike a generic port their
@@ -335,6 +342,31 @@ function BlockInspector({ block }: { block: RtlBlock }) {
         </div>
       ) : null}
 
+      {block.kind === "gate" ? (
+        <div className="field">
+          <span>Rotation</span>
+          {/* Reuses .mode-toggle's own CSS — a plain flex row of equal-width
+              segments, nothing about it actually specific to "mode" — rather
+              than duplicating the same rules under a new class name for a
+              four-way instead of two-way control. */}
+          <div className="mode-toggle" role="group" aria-label="Gate rotation">
+            {GATE_ROTATIONS.map((rotation) => (
+              <button
+                key={rotation}
+                type="button"
+                className={`mode-toggle__option${
+                  (block.gateRotation ?? "right") === rotation ? " is-active" : ""
+                }`}
+                aria-pressed={(block.gateRotation ?? "right") === rotation}
+                onClick={() => setGateRotation(block.id, rotation)}
+              >
+                {rotation.charAt(0).toUpperCase() + rotation.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <h3 className="inspector__subheading">Ports</h3>
       <div className={`port-table${block.kind === "gate" ? " port-table--no-width" : ""}`}>
         <div className="port-list__header" aria-hidden="true">
@@ -364,7 +396,11 @@ function BlockInspector({ block }: { block: RtlBlock }) {
               {hasFixedPosition(port) ? (
                 <span
                   className="port-row__fixed-value"
-                  title="Fixed position for the clock/reset"
+                  title={
+                    block.kind === "gate"
+                      ? "Set by the gate's Rotation, above"
+                      : "Fixed position for the clock/reset"
+                  }
                 >
                   {port.side}
                 </span>
