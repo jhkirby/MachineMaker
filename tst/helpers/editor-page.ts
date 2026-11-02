@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-04
@@ -836,7 +836,10 @@ export class EditorPage {
   async openDocument(path: string): Promise<void> {
     await this.dialogs.stub({ open: path });
     await this.openMenu("File");
-    await this.action("Open").click();
+    await this.page.getByRole("menuitem", { name: "Open Schematic" }).click();
+    // Open Schematic shows a list popup; its folder button is the way to
+    // the (stubbed) OS file dialog.
+    await this.page.getByRole("button", { name: "Browse for a schematic file" }).click();
     // The open handler fits the view with an animation; nothing measured
     // before it lands is trustworthy.
     await this.waitForViewportSettled();

@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-11-02
@@ -10,8 +10,8 @@ import { GRID_SIZE } from "./grid";
 
 /** Whole-diagram counts shown in the status bar (StatusBar.tsx). */
 export interface DiagramStats {
-  /** Blocks of kind "module". */
-  modules: number;
+  /** Every block on the canvas, of any kind. */
+  components: number;
   /** Connections drawn between ports — one per wire on the canvas. */
   links: number;
   /** Physical signal wires: each link counts as its bus width (1 if plain). */
@@ -56,7 +56,7 @@ export function computeDiagramStats(diagram: RtlDiagram): DiagramStats {
     .map((block) => block.ports[0]?.direction);
 
   return {
-    modules: diagram.blocks.filter((block) => block.kind === "module").length,
+    components: diagram.blocks.length,
     links: diagram.wires.length,
     wires,
     emptyPorts: [...portWidth.keys()].filter((key) => !connected.has(key))

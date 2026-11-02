@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-04
@@ -28,10 +28,10 @@ test.describe("application shell", () => {
   });
 
   test("starts on an empty untitled document", async ({ editor, page }) => {
-    await expect(editor.titleInput).toHaveValue("Untitled Diagram");
+    await expect(editor.titleInput).toHaveValue("Untitled Schematic");
     await expect(editor.nodes).toHaveCount(0);
     await expect(editor.edges).toHaveCount(0);
-    await expect(page).toHaveTitle("Untitled Diagram — RTL Schematic");
+    await expect(page).toHaveTitle("Untitled Schematic — MachineMaker");
   });
 
   test("starts clean, with nothing to undo", async ({ editor }) => {
@@ -49,7 +49,7 @@ test.describe("application shell", () => {
   test("window title tracks the document", async ({ editor, page }) => {
     await editor.titleInput.fill("Fetch Stage");
     await editor.titleInput.press("Enter");
-    await expect(page).toHaveTitle("● Fetch Stage — RTL Schematic");
+    await expect(page).toHaveTitle("● Fetch Stage — MachineMaker");
     await expect(editor.dirtyIndicator).toBeVisible();
   });
 });

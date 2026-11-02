@@ -1,8 +1,8 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-22
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import { useId } from "react";
@@ -16,9 +16,12 @@ import type { GateRotation, GateType } from "../../../../shared/diagram-model";
  * non-gate kind's ports do against its plain rectangular edge. */
 const MARGIN = 0;
 
-/** Radius, in px, of the small negation bubble NAND/NOR/XNOR draw at their
- * output tip. */
-const BUBBLE_RADIUS = 4;
+/** Radius, in px, of the negation bubble NAND/NOR/XNOR draw at their output
+ * tip. The bubble is centered exactly on the output port (the block's own
+ * output edge — the same spot every non-negated gate's tip and port sit on),
+ * so it has to be wide enough to enclose that port's 9px circle (.rtl-port,
+ * app.css) with its own 1.5px stroke still clear of it. */
+const BUBBLE_RADIUS = 7;
 
 /** Visible thickness, in px, of a selected gate's ring — matches the 3px
  * every other kind's own selection ring uses (.rtl-block.is-selected::after,
@@ -34,6 +37,13 @@ const XOR_BACK_LINE_GAP = 6;
 /** Which gate types draw a bubble at their output tip. */
 function isNegated(type: GateType): boolean {
   return type === "NAND" || type === "NOR" || type === "XNOR";
+}
+
+/** How far short of the block's output edge a type's body tip stops — a
+ * negated type's bubble is centered on that edge (see {@link BUBBLE_RADIUS}),
+ * so its body ends one bubble radius earlier, where the bubble begins. */
+function tipInset(type: GateType): number {
+  return MARGIN + (isNegated(type) ? BUBBLE_RADIUS : 0);
 }
 
 /** Which gate types are in the OR family (curved body) rather than the AND
@@ -88,9 +98,10 @@ interface GateGeometry {
  * straight edge plus a semicircle); the OR family (OR/NOR/XOR/XNOR) draws
  * the usual concave-back, pointed-tip shield, with XOR/XNOR adding a second
  * free-floating curve just behind it. A negated type (NAND/NOR/XNOR) reports
- * its {@link GateGeometry.tipX} short of `w` by {@link BUBBLE_RADIUS}*2, the
- * room GateSymbol needs to draw the bubble without the whole symbol growing
- * past its box.
+ * its {@link GateGeometry.tipX} short of `w` by {@link BUBBLE_RADIUS}, so the
+ * bubble GateSymbol draws there is centered on the output edge (and the
+ * output port sitting on it) — the same position every non-negated type's
+ * tip, and port, already has.
  *
  * @param type - Which gate this is.
  * @param w - Local width (the pointing/input-to-output axis) in px.
@@ -102,7 +113,7 @@ function gateGeometry(type: GateType, w: number, h: number): GateGeometry {
   const yTop = MARGIN;
   const yBot = h - MARGIN;
   const midY = h / 2;
-  const rightMargin = MARGIN + (isNegated(type) ? BUBBLE_RADIUS * 2 : 0);
+  const rightMargin = tipInset(type);
   const x0 = MARGIN;
   const x1 = w - rightMargin;
 
@@ -205,11 +216,79 @@ export function gateInputEdgeOffset(
   if (!isOrFamily(type)) {
     return 0;
   }
-  const rightMargin = MARGIN + (isNegated(type) ? BUBBLE_RADIUS * 2 : 0);
-  const span = localW - MARGIN - rightMargin;
+  const span = localW - MARGIN - tipInset(type);
   const backBulge = span * 0.25;
   const bodyOffset = backCurveOffset(canonicalAlong, localH, backBulge);
   return hasBackLine(type) ? bodyOffset - XOR_BACK_LINE_GAP : bodyOffset;
+}
+
+/**
+ * Extra inset, in px, for a gate's input port *labels* beyond the port's own
+ * {@link gateInputEdgeOffset}. That offset puts an XOR/XNOR port on the outer
+ * back line, a few px in front of the body itself — measuring the label
+ * from there too would leave it crowding the body's own back curve, so it's
+ * pushed back in by that same gap to sit as far from the body as an OR's.
+ *
+ * @param type - Which gate this is.
+ * @returns The extra label inset, in px — 0 for every type without a back
+ *   line.
+ */
+export function gateInputLabelExtra(type: GateType): number {
+  return hasBackLine(type) ? XOR_BACK_LINE_GAP : 0;
+}
+
+/** Half the port label's height plus breathing room, in px — how far above
+ * and below the midline the output label's clearance from the body edge is
+ * measured (see {@link gateOutputLabelInset}). */
+const OUTPUT_LABEL_HALF_CLEARANCE = 12;
+
+/** Gap, in px, kept between the output label and the body's edge (or the
+ * negation bubble) — matches what an AND gate's label naturally gets from
+ * the default inset, which is the look every type is matched to. */
+const OUTPUT_LABEL_GAP = 9;
+
+/**
+ * How far in from the block's output edge a gate's output port label must
+ * sit to keep the same clear space from the drawn body that an AND gate's
+ * label has. The default flat inset is fine for AND — its semicircle stays
+ * near the block edge for the label's whole height — but an OR-family body
+ * narrows to a point at the midline, and a negated type's bubble occupies
+ * the first bubble-diameter of that line, so both need the label pulled
+ * further in.
+ *
+ * @param type - Which gate this is.
+ * @param localW - The gate's local (pre-rotation) width.
+ * @param localH - The gate's local (pre-rotation) height.
+ * @param baseInset - The inset an ordinary port label uses.
+ * @returns The inset, in px, from the output edge to the label.
+ */
+export function gateOutputLabelInset(
+  type: GateType,
+  localW: number,
+  localH: number,
+  baseInset: number,
+): number {
+  const half = localH / 2;
+  const c = Math.min(OUTPUT_LABEL_HALF_CLEARANCE, half);
+  const x0 = MARGIN;
+  const x1 = localW - tipInset(type);
+  let edgeX: number;
+  if (isOrFamily(type)) {
+    // The front curve from a corner to the tip is the quadratic
+    // P0=(x0, corner), C=(x0+frontReach, corner), P2=(x1, mid); its distance
+    // from the midline is half·(1 − t²), so solve for the t at distance c.
+    const frontReach = (x1 - x0) * 0.55;
+    const t = Math.sqrt(Math.max(0, 1 - c / half));
+    edgeX = 2 * t * (1 - t) * (x0 + frontReach) + (1 - t) ** 2 * x0 + t * t * x1;
+  } else {
+    const radius = half - MARGIN;
+    edgeX = x1 - radius + Math.sqrt(Math.max(0, radius * radius - c * c));
+  }
+  const bodyClear = localW - edgeX + OUTPUT_LABEL_GAP;
+  const bubbleClear = isNegated(type)
+    ? 2 * BUBBLE_RADIUS + OUTPUT_LABEL_GAP / 2
+    : 0;
+  return Math.max(baseInset, bodyClear, bubbleClear);
 }
 
 /**
@@ -281,6 +360,8 @@ export default function GateSymbol({
   // resting edge never moves. The selection ring (below) is a separate
   // overlay instead of a thicker version of this stroke.
   const strokeWidth = 1.5;
+  // Doubled because the clip below keeps only the inward half of the stroke.
+  const ringStrokeWidth = selected ? SELECTION_RING_WIDTH * 2 : 0;
   // React's useId() output contains colons (e.g. ":r3:") — harmless as a
   // plain `id` attribute, but colons inside a bare `url(#...)` token are
   // needless risk, so they're stripped rather than relied on to parse
@@ -352,26 +433,30 @@ export default function GateSymbol({
          * inset box-shadow ring already has (.rtl-block.is-selected::after,
          * app.css), rather than a plain thicker stroke, which would grow
          * both inward and outward and shift the gate's own visible edge. */}
-        {selected ? (
-          <g clipPath={`url(#${clipId})`}>
-            <path
-              d={body}
+        {/* Always rendered — only its stroke width toggles, via inline
+         * style rather than the attribute, so app.css's
+         * .gate-symbol__selection-ring transition can animate it sliding
+         * in/out instead of the ring popping into existence. */}
+        <g clipPath={`url(#${clipId})`}>
+          <path
+            className="gate-symbol__selection-ring"
+            d={body}
+            fill="none"
+            stroke={stroke}
+            style={{ strokeWidth: ringStrokeWidth }}
+          />
+          {isNegated(type) ? (
+            <circle
+              className="gate-symbol__selection-ring"
+              cx={tipX + BUBBLE_RADIUS}
+              cy={midY}
+              r={BUBBLE_RADIUS}
               fill="none"
               stroke={stroke}
-              strokeWidth={SELECTION_RING_WIDTH * 2}
+              style={{ strokeWidth: ringStrokeWidth }}
             />
-            {isNegated(type) ? (
-              <circle
-                cx={tipX + BUBBLE_RADIUS}
-                cy={midY}
-                r={BUBBLE_RADIUS}
-                fill="none"
-                stroke={stroke}
-                strokeWidth={SELECTION_RING_WIDTH * 2}
-              />
-            ) : null}
-          </g>
-        ) : null}
+          ) : null}
+        </g>
       </g>
     </svg>
   );

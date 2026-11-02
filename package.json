@@ -1,7 +1,7 @@
 {
-  "name": "rtl-schematic",
+  "name": "machinemaker",
   "version": "0.1.0",
-  "description": "Desktop editor for hand-authoring RTL block diagrams.",
+  "description": "MachineMaker \u2014 desktop editor for hand-authoring RTL block diagrams.",
   "author": "Joshua H. Kirby",
   "license": "UNLICENSED",
   "private": true,
@@ -12,7 +12,8 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tst/tsconfig.json",
     "package": "electron-vite build && electron-builder",
-    "test": "playwright test --config tst/playwright.config.ts"
+    "test": "playwright test --config tst/playwright.config.ts",
+    "package:dir": "electron-vite build && electron-builder --dir --publish never"
   },
   "dependencies": {
     "@xyflow/react": "^12.3.5",
@@ -25,14 +26,14 @@
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.3",
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.8",
-    "electron-vite": "^2.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
     "html-to-image": "^1.11.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^8.3.5"
   }
 }

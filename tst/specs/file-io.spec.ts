@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-04
@@ -97,7 +97,7 @@ test.describe("opening", () => {
     await expect(editor.edges).toHaveCount(1);
     await expect(editor.titleInput).toHaveValue("Fetch Stage");
     await expect(editor.dirtyIndicator).toHaveCount(0);
-    await expect(page).toHaveTitle("Fetch Stage — RTL Schematic");
+    await expect(page).toHaveTitle("Fetch Stage — MachineMaker");
   });
 
   test("renders a document at working volume", async ({ editor, workspace }) => {

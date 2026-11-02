@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-01
@@ -8,15 +8,66 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IpcChannel } from "../shared/ipc-contract";
 import type {
+  CreateSchematicRequest,
+  DetachTabRequest,
+  OpenDocumentsReport,
+  TabAttachEvent,
   ExportImageRequest,
+  OpenDiagramRequest,
+  OpenEditorRequest,
   RtlBridgeApi,
   SaveDiagramRequest,
   SchematicFileFormat,
 } from "../shared/ipc-contract";
 
 // The only surface the renderer gets. No Node primitives leak past this file.
+/**
+ * Listen on a main → renderer push channel, handing the callback only the
+ * payload (never Electron's event object, which would leak `sender` into
+ * the page).
+ *
+ * @param channel - The push channel.
+ * @param callback - Receives each payload.
+ * @returns Unsubscribe function.
+ */
+function subscribe<T>(channel: string, callback: (payload: T) => void): () => void {
+  const listener = (_event: unknown, payload: T) => callback(payload);
+  ipcRenderer.on(channel, listener);
+  return () => {
+    ipcRenderer.removeListener(channel, listener);
+  };
+}
+
 const api: RtlBridgeApi = {
-  openDiagram: () => ipcRenderer.invoke(IpcChannel.OpenDiagram),
+  openDiagram: (request?: OpenDiagramRequest) =>
+    ipcRenderer.invoke(IpcChannel.OpenDiagram, request),
+  loadDiagram: (path: string) => ipcRenderer.invoke(IpcChannel.LoadDiagram, path),
+  createSchematic: (request: CreateSchematicRequest) =>
+    ipcRenderer.invoke(IpcChannel.CreateSchematic, request),
+  createProject: (name: string) =>
+    ipcRenderer.invoke(IpcChannel.CreateProject, name),
+  openProject: () => ipcRenderer.invoke(IpcChannel.OpenProject),
+  loadProject: (path: string) => ipcRenderer.invoke(IpcChannel.LoadProject, path),
+  listRecentProjects: () => ipcRenderer.invoke(IpcChannel.ListRecentProjects),
+  removeRecentProject: (path: string) =>
+    ipcRenderer.invoke(IpcChannel.RemoveRecentProject, path),
+  getLaunchContext: () => ipcRenderer.invoke(IpcChannel.GetLaunchContext),
+  openEditor: (request: OpenEditorRequest) =>
+    ipcRenderer.invoke(IpcChannel.OpenEditor, request),
+  returnHome: (projectPath: string | null, closeThisWindow: boolean) =>
+    ipcRenderer.invoke(IpcChannel.ReturnHome, projectPath, closeThisWindow),
+  reportOpenDocuments: (report: OpenDocumentsReport) =>
+    ipcRenderer.invoke(IpcChannel.ReportOpenDocuments, report),
+  focusOpenDocument: (path: string) =>
+    ipcRenderer.invoke(IpcChannel.FocusOpenDocument, path),
+  detachTab: (request: DetachTabRequest) =>
+    ipcRenderer.invoke(IpcChannel.DetachTab, request),
+  onTabAttach: (callback: (event: TabAttachEvent) => void) =>
+    subscribe(IpcChannel.TabAttach, callback),
+  onActivateDocument: (callback: (path: string) => void) =>
+    subscribe(IpcChannel.ActivateDocument, callback),
+  onShowProject: (callback: (projectPath: string) => void) =>
+    subscribe(IpcChannel.ShowProject, callback),
   saveDiagram: (request: SaveDiagramRequest) =>
     ipcRenderer.invoke(IpcChannel.SaveDiagram, request),
   exportImage: (request: ExportImageRequest) =>

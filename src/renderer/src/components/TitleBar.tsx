@@ -1,11 +1,11 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-21
  * --------------------------------------------------------------------------- */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 /**
  * Single horizontal bar glyph for the minimize button.
@@ -92,12 +92,14 @@ function CloseIcon() {
  * created with `frame: false` — see WindowManager). An empty draggable
  * region plus minimize/maximize/close buttons that mirror the native ones'
  * behavior via IPC; the buttons stay hidden until the pointer is over the
- * bar (app.css, TITLEBAR). The document title already shows in the toolbar
- * right below, so the bar itself carries no text.
+ * bar (app.css, TITLEBAR). Anything passed as children (the editor's tab
+ * strip, TabBar.tsx) sits at the bar's left, ahead of the drag region.
+ *
+ * @param props.children - Optional content for the bar's left side.
  *
  * @returns The titlebar element.
  */
-export default function TitleBar() {
+export default function TitleBar({ children }: { children?: ReactNode }) {
   const [maximized, setMaximized] = useState(false);
   const [hovered, setHovered] = useState(false);
 
@@ -112,6 +114,7 @@ export default function TitleBar() {
 
   return (
     <div className={`titlebar${hovered ? " titlebar--hovered" : ""}`}>
+      {children}
       <div
         className="titlebar__drag-region"
         onDoubleClick={() => void window.rtl.windowToggleMaximize()}
@@ -142,7 +145,7 @@ export default function TitleBar() {
           className="titlebar__button titlebar__button--close"
           onClick={() => void window.rtl.windowClose()}
           aria-label="Close"
-          title="Close (Ctrl+W)"
+          title="Close window"
         >
           <CloseIcon />
         </button>

@@ -1,8 +1,8 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 // Rules that tie a block's size to its ports. Every port occupies its own
@@ -240,6 +240,10 @@ export function minBlockSize(block: RtlBlock): {
     // a full pitch in from the corner, more room than its own half needs.)
     portsOnSide(block, "top") * topPitch + Math.ceil(topPitch / 2),
     portsOnSide(block, "bottom") * bottomPitch + Math.ceil(bottomPitch / 2),
+    // An up/down gate's input face runs along top/bottom — see
+    // symmetricGateSlots.
+    gateSymmetricMinCells(block, "top"),
+    gateSymmetricMinCells(block, "bottom"),
   );
   const heightCells = Math.max(
     MIN_BLOCK_CELLS,
@@ -253,8 +257,39 @@ export function minBlockSize(block: RtlBlock): {
     topClearanceCells(block) + portsOnSide(block, "left") + 1,
     topClearanceCells(block) + portsOnSide(block, "right") + 1,
     clkClearanceHeightCells(block),
+    // A gate's input face needs room to seat its inputs symmetrically about
+    // the output's midline — see symmetricGateSlots.
+    gateSymmetricMinCells(block, "left"),
+    gateSymmetricMinCells(block, "right"),
   );
-  return { width: widthCells * GRID_SIZE, height: heightCells * GRID_SIZE };
+  // A gate's ports and body are symmetric about its midlines, which only
+  // fall on grid points at an even cell count — see symmetricGateSlots.
+  const even = (n: number) => (block.kind === "gate" ? n + (n % 2) : n);
+  const height = even(heightCells);
+  const width = even(widthCells);
+  if (block.kind !== "gate") {
+    return { width: width * GRID_SIZE, height: height * GRID_SIZE };
+  }
+  // A gate's body keeps its proportions as its input face grows: the AND
+  // family's front is a semicircle as tall as the input face, so the body
+  // must be at least half that deep (plus room for the flat run and a
+  // negation bubble) or the arc overruns the block — see gateDepthCells.
+  // Measured against the block's actual input-face length, not just its
+  // floor, so stretching a gate taller by hand widens it too.
+  const pointsVertically =
+    block.gateRotation === "up" || block.gateRotation === "down";
+  if (pointsVertically) {
+    const face = Math.max(width, block.width / GRID_SIZE);
+    return {
+      width: width * GRID_SIZE,
+      height: Math.max(height, even(gateDepthCells(face))) * GRID_SIZE,
+    };
+  }
+  const face = Math.max(height, block.height / GRID_SIZE);
+  return {
+    width: Math.max(width, even(gateDepthCells(face))) * GRID_SIZE,
+    height: height * GRID_SIZE,
+  };
 }
 
 /**
@@ -286,15 +321,22 @@ export function resizeToFitPorts(
   block: RtlBlock,
   priorMin: { width: number; height: number } | undefined,
 ): void {
-  const min = minBlockSize(block);
-  block.width =
-    priorMin && block.width === priorMin.width
-      ? min.width
-      : Math.max(block.width, min.width);
+  // Height then width, each from a fresh floor: a gate's minimum depth
+  // depends on its input-face length (see gateDepthCells), so the one axis
+  // has to settle before the other's floor is read.
+  const heightMin = minBlockSize(block).height;
   block.height =
     priorMin && block.height === priorMin.height
-      ? min.height
-      : Math.max(block.height, min.height);
+      ? heightMin
+      : Math.max(block.height, heightMin);
+  const widthMin = minBlockSize(block).width;
+  block.width =
+    priorMin && block.width === priorMin.width
+      ? widthMin
+      : Math.max(block.width, widthMin);
+  // An up/down gate's face is its width, so its height floor can move once
+  // the width settles — one more grow-only pass picks that up.
+  growToFitPorts(block);
 }
 
 /**
@@ -577,6 +619,82 @@ function maxSlotBoundForSide(block: RtlBlock, side: PortSide): number {
 }
 
 /**
+ * Slots placing `count` gate ports on one side mirror-symmetric about that
+ * side's own midpoint — the axis GateSymbol draws every gate body (and its
+ * output tip) around. The generic floor-divided centering below can't
+ * guarantee that: an even count of ports one slot apart on a side whose
+ * midpoint is itself a grid point has no symmetric arrangement, so it ends
+ * up biased toward the starting corner.
+ *
+ * Prefers a two-slot step for every count, odd or even — an even count
+ * *needs* it (the ports straddle the midpoint, e.g. inputs at 2 and 4 around
+ * an output at 3), and using it for odd counts too means the layout (and
+ * {@link gateSymmetricMinCells}'s size) grows steadily with each added port
+ * instead of alternating between a tight and a spread arrangement. Falls
+ * back to a one-slot step only when the user has sized the side too small
+ * for two (it can't be by default — see gateSymmetricMinCells).
+ *
+ * @param block - The gate block.
+ * @param side - The side being placed.
+ * @param count - How many ports sit on that side.
+ * @returns The slots in order, or null if no symmetric arrangement fits
+ *   within the side's usable range (the caller falls back to plain
+ *   centering).
+ */
+function symmetricGateSlots(
+  block: RtlBlock,
+  side: PortSide,
+  count: number,
+): number[] | null {
+  const cells =
+    (side === "left" || side === "right" ? block.height : block.width) /
+    GRID_SIZE;
+  const pitch = portPitchCells(block, side);
+  const center = cells / 2 / pitch;
+  const minBound = minSlotBoundForSide(block, side);
+  const maxBound = maxSlotBoundForSide(block, side);
+  for (const step of [2, 1]) {
+    const start = center - (step * (count - 1)) / 2;
+    const end = start + step * (count - 1);
+    if (Number.isInteger(start) && start >= minBound && end <= maxBound) {
+      return Array.from({ length: count }, (_, index) => start + index * step);
+    }
+  }
+  return null;
+}
+
+/**
+ * The shallowest a gate's body may be (along its pointing axis) for an
+ * input face `faceCells` long: half the face — the radius of the AND
+ * family's semicircular front — plus two cells for the flat run behind it
+ * and a negation bubble in front.
+ *
+ * @param faceCells - Length of the gate's input face, in cells.
+ * @returns The minimum depth, in cells.
+ */
+function gateDepthCells(faceCells: number): number {
+  return Math.ceil(faceCells / 2) + 2;
+}
+
+/**
+ * The fewest cells a gate's side must span for {@link symmetricGateSlots}
+ * to seat its ports two slots apart about the midpoint: 2·n slots, which
+ * leaves one free slot at each end and puts the midpoint (where the output
+ * sits) on a grid point. Strictly increasing in n, so adding a port can
+ * only ever grow the gate, never shrink it. 0 for any other kind.
+ *
+ * @param block - The block to size.
+ * @param side - Which side's length to compute.
+ * @returns The minimum length in cells along that side.
+ */
+function gateSymmetricMinCells(block: RtlBlock, side: PortSide): number {
+  if (block.kind !== "gate") {
+    return 0;
+  }
+  return 2 * portsOnSide(block, side) * portPitchCells(block, side);
+}
+
+/**
  * Center each side's regular (non-pinned) ports within the room actually
  * available to them, rather than leaving them packed against whichever end
  * nextFreeSlot happened to start counting from — which is how they arrive by
@@ -602,6 +720,15 @@ export function centerPortGroups(block: RtlBlock): void {
     }
     const minBound = minSlotBoundForSide(block, side);
     const maxBound = maxSlotBoundForSide(block, side);
+    if (block.kind === "gate") {
+      const symmetric = symmetricGateSlots(block, side, regular.length);
+      if (symmetric) {
+        regular.forEach((port, index) => {
+          port.slot = symmetric[index];
+        });
+        continue;
+      }
+    }
     // Plain slot-count span — .slot is an ordinal (pitch is applied only at
     // render time), so this must not be scaled by pitch either.
     const occupiedSlots = regular.length - 1;

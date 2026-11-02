@@ -1,100 +1,360 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-08-27
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
-import { ipcMain, type IpcMainInvokeEvent } from "electron";
+import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from "electron";
 import { IpcChannel } from "../shared/ipc-contract";
+import { MAX_EDITOR_TABS } from "../shared/project-model";
 import type {
+  CreateSchematicRequest,
+  DetachTabRequest,
+  DetachTabResult,
   ExportImageRequest,
+  OpenDocumentsReport,
+  TabAttachEvent,
+  OpenDiagramRequest,
+  OpenEditorRequest,
   SaveDiagramRequest,
   SchematicFileFormat,
 } from "../shared/ipc-contract";
 import type { ProjectFileService } from "./project-file-service";
-import type { WindowManager } from "./window-manager";
+import type { OpenDocumentRegistry } from "./open-document-registry";
+import type { ProjectService } from "./project-service";
+import type { RecentProjectsStore } from "./recent-projects-store";
+import { isAppUrl, type WindowManager } from "./window-manager";
+
+/**
+ * Check an IPC argument is a non-empty string before it reaches the
+ * filesystem — the renderer is our own code, but a malformed call should
+ * fail loudly here rather than as an obscure fs error.
+ *
+ * @param value - The argument to check.
+ * @param what - Its name, for the error message.
+ * @returns The value, typed as a string.
+ * @throws {TypeError} If it isn't a non-empty string.
+ */
+function requireString(value: unknown, what: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError(`${what} must be a non-empty string.`);
+  }
+  return value;
+}
 
 /**
  * Registers the `ipcMain.handle` endpoints that back the preload bridge,
- * translating each call into a {@link ProjectFileService} operation scoped to
- * the current window.
+ * translating each call into a file, project or window operation scoped to
+ * the window that made it.
  */
 export class IpcHandlers {
   /**
-   * @param windows - Source of the window that dialogs attach to.
-   * @param files - Service that performs the actual disk work.
+   * @param windows - Opens/closes windows and resolves a sender's window.
+   * @param files - Reads and writes individual schematic files.
+   * @param projects - Creates and reads project folders.
+   * @param recents - The home page's recent-projects list.
+   * @param documents - Which documents each editor window has open.
    */
   constructor(
     private readonly windows: WindowManager,
     private readonly files: ProjectFileService,
-  ) {}
+    private readonly projects: ProjectService,
+    private readonly recents: RecentProjectsStore,
+    private readonly documents: OpenDocumentRegistry,
+  ) {
+    windows.onWindowClosed((id) => documents.forget(id));
+  }
 
   /**
    * Attach every handler. Call once during app startup.
    */
   register(): void {
-    ipcMain.handle(IpcChannel.OpenDiagram, () =>
-      this.files.openDiagram(this.requireWindow()),
+    this.registerDocumentHandlers();
+    this.registerProjectHandlers();
+    this.registerWindowHandlers();
+  }
+
+  /**
+   * Register one IPC endpoint that only answers the app's own pages. Every
+   * handler goes through here: a call from any other frame (an injected
+   * iframe, a page the window was somehow navigated to) is rejected before
+   * it can touch the filesystem or a window.
+   *
+   * @param channel - The IPC channel.
+   * @param listener - The handler, called only for trusted senders.
+   */
+  private handle<Args extends unknown[], Result>(
+    channel: string,
+    listener: (event: IpcMainInvokeEvent, ...args: Args) => Result,
+  ): void {
+    ipcMain.handle(channel, (event, ...args) => {
+      const url = event.senderFrame?.url ?? "";
+      if (!isAppUrl(url)) {
+        throw new Error(`Rejected IPC "${channel}" from untrusted sender ${url}`);
+      }
+      return listener(event, ...(args as Args));
+    });
+  }
+
+  /** Schematic open/save/import/export/autosave. */
+  private registerDocumentHandlers(): void {
+    this.handle(
+      IpcChannel.OpenDiagram,
+      (event: IpcMainInvokeEvent, request?: OpenDiagramRequest) =>
+        this.files.openDiagram(
+          this.windows.windowFor(event.sender),
+          request?.defaultPath,
+        ),
     );
 
-    ipcMain.handle(
+    this.handle(IpcChannel.LoadDiagram, (_event, path: unknown) =>
+      this.files.loadDiagram(requireString(path, "path")),
+    );
+
+    this.handle(
+      IpcChannel.CreateSchematic,
+      (_event, request: CreateSchematicRequest) =>
+        this.files.createSchematic({
+          ...request,
+          name: requireString(request?.name, "name"),
+        }),
+    );
+
+    this.handle(
       IpcChannel.SaveDiagram,
-      (_event: IpcMainInvokeEvent, request: SaveDiagramRequest) =>
-        this.files.saveDiagram(this.requireWindow(), request),
+      (event: IpcMainInvokeEvent, request: SaveDiagramRequest) =>
+        this.files.saveDiagram(this.windows.windowFor(event.sender), request),
     );
 
-    ipcMain.handle(
+    this.handle(
       IpcChannel.ImportSchematic,
-      (_event: IpcMainInvokeEvent, format: SchematicFileFormat) =>
-        this.files.importSchematic(this.requireWindow(), format),
+      (event: IpcMainInvokeEvent, format: SchematicFileFormat) =>
+        this.files.importSchematic(this.windows.windowFor(event.sender), format),
     );
 
-    ipcMain.handle(
+    this.handle(
       IpcChannel.AutosaveDiagram,
       (_event: IpcMainInvokeEvent, request: SaveDiagramRequest) =>
         this.files.autosaveDiagram(request),
     );
 
-    ipcMain.handle(
+    this.handle(
       IpcChannel.ExportImage,
-      (_event: IpcMainInvokeEvent, request: ExportImageRequest) =>
-        this.files.exportImage(this.requireWindow(), request),
+      (event: IpcMainInvokeEvent, request: ExportImageRequest) =>
+        this.files.exportImage(this.windows.windowFor(event.sender), request),
+    );
+  }
+
+  /** Project create/open/load and the recent-projects list. */
+  private registerProjectHandlers(): void {
+    this.handle(IpcChannel.CreateProject, async (event, name: unknown) => {
+      const result = await this.projects.createProject(
+        this.windows.windowFor(event.sender),
+        requireString(name, "name"),
+      );
+      if (result.ok && result.data) {
+        await this.recents.touch(result.data.path, result.data.name);
+      }
+      return result;
+    });
+
+    this.handle(IpcChannel.OpenProject, async (event) => {
+      const result = await this.projects.openProject(
+        this.windows.windowFor(event.sender),
+      );
+      if (result.ok && result.data) {
+        await this.recents.touch(result.data.path, result.data.name);
+      }
+      return result;
+    });
+
+    this.handle(IpcChannel.LoadProject, async (_event, path: unknown) => {
+      const project = await this.projects.loadProject(
+        requireString(path, "path"),
+      );
+      await this.recents.touch(project.path, project.name);
+      return project;
+    });
+
+    this.handle(IpcChannel.ListRecentProjects, () => this.recents.list());
+
+    this.handle(IpcChannel.RemoveRecentProject, (_event, path: unknown) =>
+      this.recents.remove(requireString(path, "path")),
+    );
+  }
+
+  /** Launch context, home ⇄ editor switching, and the titlebar buttons. */
+  private registerWindowHandlers(): void {
+    this.handle(IpcChannel.GetLaunchContext, (event) =>
+      this.windows.contextFor(event.sender),
     );
 
-    ipcMain.handle(IpcChannel.WindowMinimize, () =>
-      this.requireWindow().minimize(),
+    this.handle(
+      IpcChannel.OpenEditor,
+      (_event: IpcMainInvokeEvent, request: OpenEditorRequest) => {
+        const paths = Array.isArray(request?.schematicPaths)
+          ? request.schematicPaths.filter(
+              (path): path is string => typeof path === "string",
+            )
+          : [];
+        // A schematic already open somewhere is brought forward rather than
+        // opened twice — two windows autosaving one file would clobber each
+        // other. Only the rest get a new window.
+        const unopened = paths.filter((path) => !this.focusOpenDocument(path));
+        if (paths.length > 0 && unopened.length === 0) {
+          return;
+        }
+        this.windows.createWindow({
+          view: "editor",
+          projectPath: request?.projectPath ?? null,
+          schematicPaths: unopened,
+        });
+      },
     );
-    ipcMain.handle(IpcChannel.WindowToggleMaximize, () => {
-      const window = this.requireWindow();
+
+    this.handle(
+      IpcChannel.ReturnHome,
+      (event, projectPath: unknown, closeThisWindow: unknown) => {
+        const project = typeof projectPath === "string" ? projectPath : null;
+        const home = this.windows.homeWindow();
+        if (home) {
+          if (home.isMinimized()) {
+            home.restore();
+          }
+          home.focus();
+          if (project) {
+            home.webContents.send(IpcChannel.ShowProject, project);
+          }
+        } else {
+          this.windows.createWindow({ view: "home", projectPath: project });
+        }
+        if (closeThisWindow === true) {
+          this.windows.windowFor(event.sender).close();
+        }
+      },
+    );
+
+    this.handle(
+      IpcChannel.ReportOpenDocuments,
+      (event, report: OpenDocumentsReport) => {
+        this.documents.report(event.sender.id, {
+          paths: Array.isArray(report?.paths)
+            ? report.paths.filter((path): path is string => typeof path === "string")
+            : [],
+          tabCount: typeof report?.tabCount === "number" ? report.tabCount : 0,
+        });
+      },
+    );
+
+    this.handle(IpcChannel.FocusOpenDocument, (event, path: unknown) =>
+      this.focusOpenDocument(requireString(path, "path"), event.sender.id),
+    );
+
+    this.handle(
+      IpcChannel.DetachTab,
+      (event, request: DetachTabRequest): DetachTabResult =>
+        this.detachTab(this.windows.windowFor(event.sender), request),
+    );
+
+    this.handle(IpcChannel.WindowMinimize, (event) =>
+      this.windows.windowFor(event.sender).minimize(),
+    );
+    this.handle(IpcChannel.WindowToggleMaximize, (event) => {
+      const window = this.windows.windowFor(event.sender);
       if (window.isMaximized()) {
         window.unmaximize();
       } else {
         window.maximize();
       }
     });
-    ipcMain.handle(IpcChannel.WindowClose, () => this.requireWindow().close());
-    // Full screen covers the OS taskbar too, which maximize never does.
-    ipcMain.handle(IpcChannel.WindowToggleFullScreen, () => {
-      const window = this.requireWindow();
+    this.handle(IpcChannel.WindowClose, (event) =>
+      this.windows.windowFor(event.sender).close(),
+    );
+    this.handle(IpcChannel.WindowToggleFullScreen, (event) => {
+      const window = this.windows.windowFor(event.sender);
       window.setFullScreen(!window.isFullScreen());
     });
-    ipcMain.handle(IpcChannel.WindowIsMaximized, () =>
-      this.requireWindow().isMaximized(),
+    this.handle(IpcChannel.WindowIsMaximized, (event) =>
+      this.windows.windowFor(event.sender).isMaximized(),
     );
   }
 
   /**
-   * Fetch the current window or fail loudly.
+   * If some window (other than `exceptWindowId`) has `path` open, bring that
+   * window and tab to the front.
    *
-   * @returns The live BrowserWindow.
-   * @throws {Error} If no window is open when an IPC call arrives.
+   * @param path - A schematic's path.
+   * @param exceptWindowId - The asking window, which doesn't count.
+   * @returns True if another window had it.
    */
-  private requireWindow() {
-    const window = this.windows.getWindow();
-    if (!window) {
-      throw new Error("No application window is available for this request.");
+  private focusOpenDocument(path: string, exceptWindowId?: number): boolean {
+    const ownerId = this.documents.windowWith(path, exceptWindowId);
+    const owner = ownerId === null ? null : this.windows.windowById(ownerId);
+    if (!owner) {
+      return false;
     }
-    return window;
+    if (owner.isMinimized()) {
+      owner.restore();
+    }
+    owner.focus();
+    owner.webContents.send(IpcChannel.ActivateDocument, path);
+    return true;
+  }
+
+  /**
+   * Decide where a tab dragged out of `source`'s strip goes:
+   *
+   * - **onto another editor window's tab strip** (with room) → it moves there;
+   * - **anywhere else, as `source`'s only tab** → `source` itself moves to
+   *   the drop point (Chrome's behavior: dragging a lone tab drags its window);
+   * - **anywhere else** → a new window opens there with it.
+   *
+   * Windows are placed so the grabbed spot ends up under the pointer.
+   *
+   * @param source - The window the tab was dragged out of.
+   * @param request - The tab, drop point, and grab offset.
+   * @returns What happened, so the source knows whether to drop the tab.
+   */
+  private detachTab(source: BrowserWindow, request: DetachTabRequest): DetachTabResult {
+    const { screenX, screenY, grabX, grabY } = request;
+    const target = this.windows.editorStripAt(screenX, screenY, source);
+    if (target && this.documents.tabCount(target.webContents.id) < MAX_EDITOR_TABS) {
+      const event: TabAttachEvent = { document: request.document, screenX };
+      target.webContents.send(IpcChannel.TabAttach, event);
+      if (target.isMinimized()) {
+        target.restore();
+      }
+      target.focus();
+      return "attached";
+    }
+
+    const [width, height] = source.isMaximized()
+      ? [1440, 900]
+      : source.getSize();
+    const placement = { x: screenX - grabX, y: screenY - grabY, width, height };
+    if (request.sourceTabCount <= 1) {
+      if (source.isMaximized()) {
+        source.unmaximize();
+      }
+      source.setBounds({
+        x: Math.round(placement.x),
+        y: Math.round(placement.y),
+        width,
+        height,
+      });
+      source.focus();
+      return "moved";
+    }
+    this.windows.createWindow(
+      {
+        view: "editor",
+        projectPath: request.document.projectPath,
+        schematicPaths: [],
+        transfer: request.document,
+      },
+      placement,
+    );
+    return "new-window";
   }
 }

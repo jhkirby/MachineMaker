@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-02
@@ -36,7 +36,7 @@ import NumericField from "./NumericField";
 const SIDES: PortSide[] = ["left", "right", "top", "bottom"];
 const DIRECTIONS: PortDirection[] = ["in", "out", "inout"];
 const GATE_TYPES: GateType[] = ["AND", "NAND", "OR", "NOR", "XOR", "XNOR"];
-const GATE_ROTATIONS: GateRotation[] = ["up", "down", "left", "right"];
+const GATE_ROTATIONS: GateRotation[] = ["right", "left", "up", "down"];
 
 /** Largest width/height, in grid cells, the size fields accept. Also sets
  *  how wide those fields are drawn: just enough for this many digits. */
@@ -92,6 +92,11 @@ export default function InspectorPanel() {
  */
 function DocumentInspector() {
   const diagram = useDiagramStore((s) => s.diagram);
+  // Reached with several components selected too (Ctrl+click or box
+  // select) — those can still be deleted together from here.
+  const hasSelectedBlocks = useDiagramStore(
+    (s) => s.selection.blockIds.length > 0,
+  );
 
   return (
     <div className="inspector__section">
@@ -101,20 +106,23 @@ function DocumentInspector() {
       <p className="inspector__muted">
         Select a block or wire to edit its properties.
       </p>
+      {hasSelectedBlocks ? <DeleteSelectionButton /> : null}
     </div>
   );
 }
 
 /**
- * Small up/down arrow pair for a number field — the app's own stand-in for
+ * The − and + buttons flanking a number field — the app's own stand-in for
  * Chromium's native spin buttons, which can't be themed and are hidden
- * globally (app.css, RESET / BASE).
+ * globally (app.css, RESET / BASE). Rendered after the input in the DOM but
+ * placed either side of it by CSS `order` (.stepper__button--dec/--inc), so
+ * Tab still lands on the field first.
  *
  * @param props.label - What the field holds, for the buttons' labels.
- * @param props.canIncrement - False at the field's maximum, disabling "up".
- * @param props.canDecrement - False at the field's minimum, disabling "down".
+ * @param props.canIncrement - False at the field's maximum, disabling "+".
+ * @param props.canDecrement - False at the field's minimum, disabling "−".
  * @param props.onStep - Called with +1 or -1.
- * @returns The stacked button pair.
+ * @returns The two buttons.
  */
 function StepButtons({
   label,
@@ -128,32 +136,32 @@ function StepButtons({
   onStep: (delta: 1 | -1) => void;
 }) {
   return (
-    <span className="stepper__buttons">
+    <>
       <button
         type="button"
-        className="stepper__button"
-        aria-label={`Increase ${label}`}
-        tabIndex={-1}
-        disabled={!canIncrement}
-        onClick={() => onStep(1)}
-      >
-        <svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true">
-          <path d="M1 5 5 1l4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        className="stepper__button"
+        className="stepper__button stepper__button--dec"
         aria-label={`Decrease ${label}`}
         tabIndex={-1}
         disabled={!canDecrement}
         onClick={() => onStep(-1)}
       >
-        <svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true">
-          <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true">
+          <path d="M1.5 5h7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       </button>
-    </span>
+      <button
+        type="button"
+        className="stepper__button stepper__button--inc"
+        aria-label={`Increase ${label}`}
+        tabIndex={-1}
+        disabled={!canIncrement}
+        onClick={() => onStep(1)}
+      >
+        <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true">
+          <path d="M1.5 5h7M5 1.5v7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      </button>
+    </>
   );
 }
 
@@ -316,7 +324,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
         />
       </label>
 
-      <div className="field field--row">
+      <div className="field field--row field--steppers">
         <label className="field">
           <span>Width</span>
           <span
@@ -656,7 +664,32 @@ function BlockInspector({ block }: { block: RtlBlock }) {
         onPreviewStart={beginInteraction}
         onPreview={(color) => previewBlockColor(block.id, color)}
       />
+
+      <DeleteSelectionButton />
     </div>
+  );
+}
+
+/**
+ * Red Delete button at the foot of the inspector. Opens the type-DELETE
+ * confirmation popup (DeleteConfirmDialog.tsx) for whatever is selected,
+ * rather than deleting outright.
+ *
+ * @returns The button.
+ */
+function DeleteSelectionButton() {
+  const requestDeleteSelection = useDiagramStore(
+    (s) => s.requestDeleteSelection,
+  );
+  return (
+    <button
+      type="button"
+      className="inspector__delete"
+      title="Delete (Del)"
+      onClick={requestDeleteSelection}
+    >
+      Delete
+    </button>
   );
 }
 

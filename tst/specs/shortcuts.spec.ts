@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-04
@@ -60,7 +60,7 @@ test.describe("keyboard shortcuts", () => {
     await page.keyboard.press("Control+n");
 
     await expect(editor.nodes).toHaveCount(0);
-    await expect(editor.titleInput).toHaveValue("Untitled Diagram");
+    await expect(editor.titleInput).toHaveValue("Untitled Schematic");
   });
 
   test("ctrl+g toggles the grid", async ({ editor, page }) => {

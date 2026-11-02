@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-11-02
@@ -56,12 +56,45 @@ export default function ViewControls({ commands }: ViewControlsProps) {
     (s) => s.nodesDraggable || s.nodesConnectable || s.elementsSelectable,
   );
   const gridVisible = useDiagramStore((s) => s.gridVisible);
+  const minimapVisible = useDiagramStore((s) => s.minimapVisible);
+  const toggleMinimap = useDiagramStore((s) => s.toggleMinimap);
 
   return (
     <>
       <button
         type="button"
         className="toolbar__icon-button"
+        data-hover-fx="peek"
+        aria-pressed={minimapVisible}
+        onClick={toggleMinimap}
+        title={minimapVisible ? "Hide minimap" : "Show minimap"}
+        aria-label={minimapVisible ? "Hide minimap" : "Show minimap"}
+      >
+        <Icon>
+          <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+          {/* The little viewport box inside the map; struck through while
+              the minimap is hidden. */}
+          <rect x="5" y="5.75" width="4.5" height="3.5" rx="0.5" />
+          {minimapVisible ? null : <path d="M2 14 14 2" />}
+        </Icon>
+      </button>
+      <button
+        type="button"
+        className="toolbar__icon-button"
+        data-hover-fx="pulse"
+        onClick={() => commands.run("select-all")}
+        title="Select all (Ctrl+A)"
+        aria-label="Select all"
+      >
+        <Icon>
+          <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" strokeDasharray="2.2 2" />
+          <rect x="5.5" y="5.5" width="5" height="5" rx="0.75" />
+        </Icon>
+      </button>
+      <button
+        type="button"
+        className="toolbar__icon-button"
+        data-hover-fx="spin-quarter"
         disabled={atMaxZoom}
         onClick={() => commands.run("zoom-in")}
         title="Zoom in (+)"
@@ -74,6 +107,7 @@ export default function ViewControls({ commands }: ViewControlsProps) {
       <button
         type="button"
         className="toolbar__icon-button"
+        data-hover-fx="stretch"
         disabled={atMinZoom}
         onClick={() => commands.run("zoom-out")}
         title="Zoom out (-)"
@@ -86,6 +120,7 @@ export default function ViewControls({ commands }: ViewControlsProps) {
       <button
         type="button"
         className="toolbar__icon-button"
+        data-hover-fx="expand"
         onClick={() => commands.run("fit-view")}
         title="Fit view (C)"
         aria-label="Fit view"
@@ -97,6 +132,7 @@ export default function ViewControls({ commands }: ViewControlsProps) {
       <button
         type="button"
         className="toolbar__icon-button"
+        data-hover-fx="tilt"
         onClick={() => commands.run("toggle-grid")}
         title={gridVisible ? "Hide grid (Ctrl+G)" : "Show grid (Ctrl+G)"}
         aria-label={gridVisible ? "Hide grid" : "Show grid"}
@@ -109,6 +145,7 @@ export default function ViewControls({ commands }: ViewControlsProps) {
       <button
         type="button"
         className="toolbar__icon-button"
+        data-hover-fx="wiggle"
         onClick={() => commands.run("toggle-lock")}
         title={isInteractive ? "Lock canvas (L)" : "Unlock canvas (L)"}
         aria-label={isInteractive ? "Lock canvas" : "Unlock canvas"}

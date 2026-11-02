@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-02
@@ -14,8 +14,12 @@ import {
   type SchematicFormat,
 } from "../model/schematic-iac";
 import { SvgExporter } from "../model/svg-exporter";
+import type { RtlDiagram } from "../../../shared/diagram-model";
 import { saveNow } from "./use-autosave";
 import { useDiagramStore } from "./diagram-store";
+import { requestName } from "./name-prompt-store";
+import { openSchematicPicker } from "./schematic-picker-store";
+import { closeTab, openInNewTab, tabsFull, useTabStore } from "./tab-store";
 
 /** The set of high-level editor actions, callable from menu or toolbar. */
 export interface DiagramCommands {
@@ -75,24 +79,58 @@ export function useDiagramCommands(
       }
     };
 
+    // New, Open and Import never replace the current document: each opens
+    // its result in a new tab (tab-store.ts), and does nothing once the
+    // window is at its tab limit (the File menu disables them then, too).
     const open = async (): Promise<void> => {
-      await saveNow();
-      const result = await window.rtl.openDiagram();
+      if (!tabsFull()) {
+        openSchematicPicker();
+      }
+    };
+
+    /**
+     * Create a schematic file (in the project, if there is one) and open it
+     * in a new tab.
+     *
+     * @param name - Its title.
+     * @param diagram - Starting contents; omit for an empty schematic.
+     */
+    const createInNewTab = async (
+      name: string,
+      diagram?: RtlDiagram,
+    ): Promise<void> => {
+      const { projectPath } = useTabStore.getState();
+      const result = await window.rtl.createSchematic({
+        projectPath,
+        name,
+        diagram,
+      });
       if (result.ok && result.data && result.path) {
-        useDiagramStore.getState().resetDocument(result.data, result.path);
-        canvasRef.current?.fitView();
+        await openInNewTab(result.data, result.path);
       }
     };
 
     const newDiagram = async (): Promise<void> => {
-      await saveNow();
-      useDiagramStore.getState().newDocument();
+      if (tabsFull()) {
+        return;
+      }
+      const name = await requestName({
+        title: "New Schematic",
+        initialValue: "Untitled Schematic",
+        submitLabel: "Create",
+      });
+      if (name) {
+        await createInNewTab(name);
+      }
     };
 
     const newStateMachine = (): void => undefined;
     const openStateMachine = (): void => undefined;
 
     const importSchematic = async (format: SchematicFormat): Promise<void> => {
+      if (tabsFull()) {
+        return;
+      }
       const result = await window.rtl.importSchematic(format);
       if (!result.ok || !result.data) {
         return;
@@ -108,13 +146,7 @@ ${error instanceof Error ? error.message : String(error)}`,
         );
         return;
       }
-      await saveNow();
-      const store = useDiagramStore.getState();
-      store.resetDocument(diagram, null);
-      // A brand-new document that only exists in memory — mark it changed
-      // so autosave gives it a file right away.
-      useDiagramStore.setState({ dirty: true, diagram: { ...diagram } });
-      canvasRef.current?.fitView();
+      await createInNewTab(diagram.title, diagram);
     };
 
     const exportSchematic = async (format: SchematicFormat): Promise<void> => {
@@ -149,8 +181,10 @@ ${error instanceof Error ? error.message : String(error)}`,
 
     const undo = (): void => useDiagramStore.getState().undo();
     const redo = (): void => useDiagramStore.getState().redo();
+    // Components go through the type-DELETE popup first; a wire-only
+    // selection is deleted straight away (see requestDeleteSelection).
     const deleteSelection = (): void =>
-      useDiagramStore.getState().deleteSelection();
+      useDiagramStore.getState().requestDeleteSelection();
     // "P" while exactly one block is selected — the same default (a new
     // input on the left) the inspector's own "+ Port" button adds.
     const addPortToSelection = (): void => {
@@ -172,8 +206,42 @@ ${error instanceof Error ? error.message : String(error)}`,
       useDiagramStore.getState().toggleMenu("export");
     const togglePalette = (): void =>
       useDiagramStore.getState().togglePalette();
+    // Ctrl+W: the current tab, or the whole window when it's the last one
+    // (closeTab's own last-tab path would also send the user home; Ctrl+W
+    // on a single tab means just "close this window").
+    const closeCurrentTab = async (): Promise<void> => {
+      const { tabs, activeId } = useTabStore.getState();
+      if (tabs.length > 1) {
+        await closeTab(activeId);
+        return;
+      }
+      await saveNow();
+      await window.rtl.windowClose();
+    };
+
+    // Ctrl+Shift+W: every tab, and so the window, bringing home forward.
+    const closeAllTabs = async (): Promise<void> => {
+      await saveNow();
+      await window.rtl.returnHome(useTabStore.getState().projectPath, true);
+    };
+
+    // Ctrl+H: the home window, opened if it was closed. This window stays.
+    const goHome = async (): Promise<void> => {
+      await saveNow();
+      await window.rtl.returnHome(useTabStore.getState().projectPath, false);
+    };
+
     const deselect = (): void =>
       useDiagramStore.getState().setSelection({ blockIds: [], wireIds: [] });
+    // Every component and wire on the canvas — the toolbar's Select All
+    // button and Ctrl+A.
+    const selectAll = (): void => {
+      const { diagram, setSelection } = useDiagramStore.getState();
+      setSelection({
+        blockIds: diagram.blocks.map((block) => block.id),
+        wireIds: diagram.wires.map((wire) => wire.id),
+      });
+    };
 
     const commands: DiagramCommands = {
       newDiagram,
@@ -222,6 +290,10 @@ ${error instanceof Error ? error.message : String(error)}`,
           "toggle-export-menu": toggleExportMenu,
           "toggle-palette": togglePalette,
           deselect,
+          "select-all": selectAll,
+          "close-tab": () => void closeCurrentTab(),
+          "close-all-tabs": () => void closeAllTabs(),
+          "go-home": () => void goHome(),
           // The title field lives in the toolbar's own tree; reaching it by
           // its accessible label avoids threading a ref through App.
           "place-module": () => togglePlacing("module"),

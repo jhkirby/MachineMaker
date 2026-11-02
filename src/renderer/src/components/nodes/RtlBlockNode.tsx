@@ -1,8 +1,8 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-04
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import { memo, useCallback } from "react";
@@ -25,6 +25,8 @@ import { useDiagramStore } from "../../state/diagram-store";
 import GateSymbol, {
   canonicalInputAlong,
   gateInputEdgeOffset,
+  gateInputLabelExtra,
+  gateOutputLabelInset,
   placementFor,
 } from "./GateSymbol";
 
@@ -127,7 +129,32 @@ function portLayout(
   const horizontal = port.side === "left" || port.side === "right";
   const alongPx = port.slot * portPitchCells(block, port.side) * GRID_SIZE;
   const along = `${alongPx}px`;
-  const inset = isClock ? CLOCK_TRIANGLE_DEPTH + CLOCK_LABEL_GAP : horizontal ? 10 : 8;
+  const baseInset = isClock
+    ? CLOCK_TRIANGLE_DEPTH + CLOCK_LABEL_GAP
+    : horizontal
+      ? 10
+      : 8;
+  // A gate's output label has to clear the body's own narrowing tip (and a
+  // negation bubble) rather than just the block edge — see
+  // gateOutputLabelInset.
+  const inset =
+    block.kind === "gate" && port.direction === "out"
+      ? (() => {
+          const { localW, localH } = placementFor(
+            block.gateRotation ?? "right",
+            block.width,
+            block.height,
+          );
+          return gateOutputLabelInset(
+            block.gateType ?? "AND",
+            localW,
+            localH,
+            baseInset,
+          );
+        })()
+      : block.kind === "gate"
+        ? baseInset + gateInputLabelExtra(block.gateType ?? "AND")
+        : baseInset;
   // A gate's input face is a curve (every type but AND/NAND), not a flat
   // edge — GateSymbol still draws that curve to fill exactly the block's own
   // box (see MARGIN there), so it only meets the flat edge every port is

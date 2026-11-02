@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-04
@@ -128,44 +128,54 @@ input[type="number"]::-webkit-outer-spin-button {
   margin: 0;
 }
 
-/* A number input with the app's own up/down buttons tucked inside its
-   right edge (StepButtons, InspectorPanel.tsx). */
-/* Sized to its content: room for the widest value the field accepts
-   (--stepper-digits, set inline from the field's max) plus the buttons —
-   not stretched across the column. */
+/* A number input flanked by the app's own − / + buttons (StepButtons,
+   InspectorPanel.tsx). Sized to its content: room for the widest value the
+   field accepts (--stepper-digits, set inline from the field's max) — not
+   stretched across the column. */
 .stepper {
-  position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: stretch;
+  gap: var(--space-1);
   align-self: flex-start;
 }
 
 .stepper input {
-  width: calc(var(--stepper-digits, 2) * 1ch + var(--space-2) + 24px + 2px);
-  padding-right: 24px;
+  width: calc(var(--stepper-digits, 2) * 1ch + var(--space-2) * 2 + 2px);
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
-.stepper__buttons {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  bottom: 3px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+/* The buttons follow the input in the DOM (so Tab reaches the field first)
+   and are pulled to either side of it here. */
+.stepper__button--dec {
+  order: -1;
+}
+
+.stepper__button--inc {
+  order: 1;
 }
 
 .stepper__button {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
+  width: 24px;
   padding: 0;
   color: var(--text-secondary);
   background: var(--surface-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: 3px;
+  border-radius: 4px;
+}
+
+.stepper__button:disabled {
+  opacity: 0.4;
+}
+
+/* Width and Height spread to the panel's full width, so Height's + button
+   lines up flush with the right edge of the Name field above. */
+.field--steppers {
+  justify-content: space-between;
+  gap: var(--space-5);
 }
 
 .stepper__button:hover:not(:disabled) {
@@ -453,6 +463,97 @@ input.is-invalid:focus {
   border-color: var(--border-strong);
 }
 
+/* ── BUTTON HOVER MOTION ──────────────────────────────────────────────────── */
+
+/* The toolbar's round icon buttons, its File/Import/Export triggers and the
+   palette's collapse toggle all fade their hover fill in and out instead of
+   snapping to it. */
+.toolbar__icon-button,
+.toolbar-menu__trigger,
+.palette__toggle {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+/* Each icon also moves on hover, picked per button (data-hover-fx in
+   Toolbar.tsx, ViewControls.tsx, ComponentPalette.tsx) to suggest what the
+   button does. The slight overshoot in the easing gives it a springy feel;
+   the same transition plays it back out on leave. */
+[data-hover-fx] svg {
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-hover-fx="nudge-left"]:hover:not(:disabled) svg {
+  transform: translateX(-2px);
+}
+
+[data-hover-fx="nudge-right"]:hover:not(:disabled) svg {
+  transform: translateX(2px);
+}
+
+[data-hover-fx="nudge-up"]:hover:not(:disabled) svg {
+  transform: translateY(-2px);
+}
+
+[data-hover-fx="spin-quarter"]:hover:not(:disabled) svg {
+  transform: rotate(90deg);
+}
+
+[data-hover-fx="spin-half"]:hover:not(:disabled) svg {
+  transform: rotate(180deg);
+}
+
+[data-hover-fx="stretch"]:hover:not(:disabled) svg {
+  transform: scaleX(1.3);
+}
+
+[data-hover-fx="expand"]:hover:not(:disabled) svg {
+  transform: scale(1.18);
+}
+
+[data-hover-fx="tilt"]:hover:not(:disabled) svg {
+  transform: rotate(45deg) scale(0.9);
+}
+
+[data-hover-fx="pulse"]:hover:not(:disabled) svg {
+  transform: scale(0.85);
+}
+
+/* Minimap toggle: the map icon drifts down-right, toward the corner of
+   the canvas the minimap lives in. */
+[data-hover-fx="peek"]:hover:not(:disabled) svg {
+  transform: translate(1.5px, 1.5px) scale(1.08);
+}
+
+/* The lock shakes rather than settling into a new pose — a keyframe run,
+   so it plays once per hover instead of holding. */
+[data-hover-fx="wiggle"]:hover:not(:disabled) svg {
+  animation: hover-wiggle 420ms ease;
+}
+
+@keyframes hover-wiggle {
+  20% {
+    transform: rotate(-12deg);
+  }
+  45% {
+    transform: rotate(10deg);
+  }
+  70% {
+    transform: rotate(-5deg);
+  }
+  100% {
+    transform: rotate(0);
+  }
+}
+
+/* A closed menu's chevron dips toward where the menu will open. An open
+   one is already flipped by an inline transform, which outranks this. */
+.toolbar-menu__trigger:hover:not(:disabled) .toolbar-menu__chevron {
+  transform: translateY(2px);
+}
+
 /* ── TOOLBAR MENU (File / Export dropdowns) ──────────────────────────────── */
 
 .toolbar-menu {
@@ -471,7 +572,7 @@ input.is-invalid:focus {
 }
 
 .toolbar-menu__chevron {
-  transition: transform 100ms ease;
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .toolbar-menu__panel {
@@ -880,22 +981,38 @@ input.is-invalid:focus {
    a custom-colored block. Inset and inset:0 like the base ring, so the
    block's own padding box — what every port Handle measures its position
    against — still never moves. */
-.rtl-block.is-selected::after {
+.rtl-block::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 1;
   border-radius: inherit;
-  box-shadow: inset 0 0 0 3px var(--block-stroke, var(--accent));
+  /* Always present at a zero-width ring rather than generated only while
+     selected, so selecting/deselecting animates the ring's width instead of
+     popping it in — a pseudo-element that only exists in one state has
+     nothing to transition from. */
+  box-shadow: inset 0 0 0 0 var(--block-stroke, var(--accent));
   pointer-events: none;
+  transition: box-shadow var(--selection-ring-duration) ease;
+}
+
+.rtl-block.is-selected::after {
+  box-shadow: inset 0 0 0 3px var(--block-stroke, var(--accent));
 }
 
 /* A gate shows its "selected" emphasis by thickening its own real outline
    instead (GateSymbol's `selected` prop) — this rectangular ring would
    otherwise draw right alongside that curved/D-shaped silhouette instead of
    around it. */
-.rtl-block.is-gate.is-selected::after {
-  box-shadow: none;
+.rtl-block.is-gate::after {
+  content: none;
+}
+
+/* The gate's own selection ring (GateSymbol.tsx): always rendered, its
+   stroke width animated between 0 and the selected width so it slides in
+   the same way the rectangular ring above does. */
+.gate-symbol__selection-ring {
+  transition: stroke-width var(--selection-ring-duration) ease;
 }
 
 /* Purely decorative (GateSymbol.tsx) — never the click/drag target itself,
@@ -1871,4 +1988,299 @@ input.is-invalid:focus {
 
 .tooltip--visible {
   opacity: 1;
+}
+
+/* ── MODAL POPUP ──────────────────────────────────────────────────────────── */
+
+/* Full-window layer behind any popup (Modal.tsx). The blur is what reads as
+   "everything else is out of play"; the matching `inert` on #root is what
+   actually enforces it. Above the tooltip layer so a tooltip
+   left over from the click that opened the popup can't float over it.
+   `no-drag` carves the title bar's drag region out from under the backdrop
+   — Electron's app-region otherwise wins over anything stacked on top. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  -webkit-app-region: no-drag;
+  animation: modal-fade-in 120ms ease;
+}
+
+.modal {
+  position: relative;
+  width: min(360px, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* The popup's top-right corner: the × and any extra icon buttons a popup
+   adds (e.g. the list pickers' "browse the file system" folder), pinned
+   out of the centered column. */
+.modal__corner {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  gap: var(--space-1);
+}
+
+.modal__icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.modal__icon-button:hover {
+  color: var(--text-primary);
+  background: var(--hover-highlight);
+  border-color: transparent;
+}
+
+/* List popups (ListPickerDialog.tsx) need room for name, path and dates. */
+.modal--wide {
+  width: min(640px, calc(100vw - 2 * var(--space-4)));
+}
+
+.modal__title {
+  margin: 0;
+  /* Clear of the close button on both sides, so the centered title stays
+     truly centered rather than shifted by the button's width. */
+  padding: 0 var(--space-5);
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  /* A long component name wraps instead of stretching the popup. */
+  overflow-wrap: anywhere;
+}
+
+.modal__input {
+  text-align: center;
+}
+
+.modal__input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* The delete popup's type-DELETE field: letter-spaced monospace so the word
+   reads as a code to match, not free text, and red to match the action. */
+.modal__input--code {
+  letter-spacing: 0.2em;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.modal__input--code:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-glow);
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: center;
+}
+
+/* The popup's Confirm button wears the same red-outline look as the
+   inspector's Delete button (.inspector__delete) — one destructive style
+   app-wide. */
+.modal__button {
+  padding: var(--space-1) var(--space-5);
+  color: var(--danger);
+  background: var(--surface-raised);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  transition:
+    background-color 180ms ease,
+    opacity 180ms ease;
+}
+
+.modal__button:hover:not(:disabled) {
+  background: var(--danger-glow);
+  border-color: var(--danger);
+}
+
+.modal__button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* A non-destructive popup's submit (NamePromptDialog's Create): the same
+   outline shape in the accent color instead of red. */
+.modal__button--primary {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.modal__button--primary:hover:not(:disabled) {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+/* Same resting look as the inspector's segmented buttons (.mode-toggle__
+   option) — raised surface, rounded — but with red text and border to
+   mark it as the destructive one. Hover fades in a faint red wash. */
+.inspector__delete {
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  color: var(--danger);
+  background: var(--surface-raised);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  transition: background-color 180ms ease;
+}
+
+.inspector__delete:hover:not(:disabled) {
+  background: var(--danger-glow);
+  border-color: var(--danger);
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── LIST PICKER POPUP ────────────────────────────────────────────────────── */
+
+/* ListPickerDialog.tsx: Open Project / Open Schematic. A search box over a
+   scrolling list; the highlighted row (hover or ↑/↓) is what Enter opens. */
+
+/* The corner carries two buttons (folder + ×); keep the centered title clear
+   of them on both sides so it stays truly centered. */
+.modal--wide .modal__title {
+  padding: 0 64px;
+}
+
+.picker__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.picker__search > svg {
+  position: absolute;
+  left: var(--space-3);
+  pointer-events: none;
+}
+
+.picker__search-input {
+  width: 100%;
+  padding-left: calc(var(--space-3) + 14px + var(--space-2));
+}
+
+.picker__search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(420px, 55vh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Name over path on the left, facts stacked on the right. */
+.picker__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name details"
+    "path details";
+  column-gap: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.picker__row.is-highlighted {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+.picker__name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.picker__badge {
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+}
+
+.picker__path {
+  grid-area: path;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.picker__details {
+  grid-area: details;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.picker__detail-label {
+  color: var(--text-muted);
+}
+
+.picker__empty {
+  margin: 0;
+  padding: var(--space-4) 0;
+  text-align: center;
+  color: var(--text-muted);
 }

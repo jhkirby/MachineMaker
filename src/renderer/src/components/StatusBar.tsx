@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-11-02
@@ -94,7 +94,11 @@ export default function StatusBar() {
       },
     ],
     [
-      { label: "Modules", value: stats.modules, title: "Module blocks in the diagram" },
+      {
+        label: "Components",
+        value: stats.components,
+        title: "Components of every kind in the diagram",
+      },
       { label: "Area", value: stats.area, title: "Grid squares covered by components" },
       {
         label: "Signals",

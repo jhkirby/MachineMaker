@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-04
@@ -43,10 +43,18 @@ export const test = base.extend<EditorFixtures>({
     await use(new Workspace(testInfo.outputPath("workspace")));
   },
 
-  app: async ({}, use) => {
+  app: async ({ workspace }, use) => {
     const app = await electron.launch({
       args: [MAIN_ENTRY],
       cwd: REPO_ROOT,
+      // Skip the home page: every spec here drives the editor.
+      // A throwaway data folder per test, so no run sees another's recent
+      // projects or theme — and none touches the developer's own.
+      env: {
+        ...process.env,
+        RTL_START_VIEW: "editor",
+        MACHINEMAKER_USER_DATA: workspace.path("user-data"),
+      },
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       executablePath: require("electron") as unknown as string,
     });

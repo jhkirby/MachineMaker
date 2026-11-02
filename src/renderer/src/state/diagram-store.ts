@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-04
@@ -29,7 +29,7 @@ import {
 } from "../../../shared/diagram-model";
 import { createBlock, createPort } from "../model/component-library";
 import { directionsCompatible } from "../model/flow-adapters";
-import { FINE_GRID_SIZE, snapToGrid } from "../model/grid";
+import { FINE_GRID_SIZE, GRID_SIZE, snapToGrid } from "../model/grid";
 import {
   centerPortGroups,
   growToFitPorts,
@@ -64,7 +64,7 @@ export interface PointerPosition {
 export type Theme = "dark" | "light";
 
 /** localStorage key the last-chosen theme is persisted under. */
-const THEME_STORAGE_KEY = "rtl-schematic:theme";
+const THEME_STORAGE_KEY = "machinemaker:theme";
 
 /**
  * The theme to start with: whatever was last saved, falling back to dark
@@ -82,6 +82,25 @@ function loadStoredTheme(): Theme {
   }
 }
 
+/**
+ * Round a gate's grid-snapped length to an even number of cells, moving in
+ * the direction the user is resizing — a gate's ports (and the drawn body's
+ * tip) are symmetric about its midline, which only lands on a grid point
+ * when the length is even (see symmetricGateSlots in port-layout.ts). So a
+ * one-cell step from 6 goes to 8 or 4, not to an off-grid 7.
+ *
+ * @param target - The requested length, already snapped to the grid, in px.
+ * @param current - The length before this resize, in px.
+ * @returns The even-cell length to use, in px.
+ */
+function evenCellsToward(target: number, current: number): number {
+  const cells = Math.round(target / GRID_SIZE);
+  if (cells % 2 === 0) {
+    return target;
+  }
+  return (target >= current ? cells + 1 : cells - 1) * GRID_SIZE;
+}
+
 /** Full editor state plus the commands that mutate it. */
 export interface DiagramStore {
   diagram: RtlDiagram;
@@ -92,6 +111,8 @@ export interface DiagramStore {
   selection: Selection;
   /** Whether the canvas grid overlay is drawn. Snapping ignores this. */
   gridVisible: boolean;
+  /** Whether the canvas's bottom-right minimap is shown. On by default. */
+  minimapVisible: boolean;
   /** The app's current color scheme, persisted across restarts. */
   theme: Theme;
   /** Whether the left component palette is collapsed to a slim rail. */
@@ -130,6 +151,13 @@ export interface DiagramStore {
    * connection is pending.
    */
   armedPort: ArmedPort | null;
+  /**
+   * Components (plus any wires selected alongside them) waiting on the
+   * type-DELETE confirmation popup (DeleteConfirmDialog.tsx), or null when
+   * no popup is open. Captured at request time rather than read live from
+   * `selection`, so the popup always deletes exactly what it named.
+   */
+  pendingDelete: Selection | null;
   past: RtlDiagram[];
   future: RtlDiagram[];
 
@@ -147,6 +175,8 @@ export interface DiagramStore {
 
   // ── view ──
   toggleGrid(): void;
+  /** Show or hide the canvas minimap. */
+  toggleMinimap(): void;
   toggleTheme(): void;
   togglePalette(): void;
   /** Open the given toolbar menu, or close it if it's already the open one. */
@@ -215,6 +245,17 @@ export interface DiagramStore {
   deleteBlocks(ids: string[]): void;
   deleteWires(ids: string[]): void;
   deleteSelection(): void;
+  /**
+   * Begin deleting the current selection: wires alone go immediately, but
+   * any selected component first opens the confirmation popup
+   * ({@link DiagramStore.pendingDelete}).
+   */
+  requestDeleteSelection(): void;
+  /** Delete everything {@link DiagramStore.pendingDelete} names, plus every
+   * wire touching those components, and close the popup. */
+  confirmPendingDelete(): void;
+  /** Close the confirmation popup without deleting anything. */
+  cancelPendingDelete(): void;
 
   // ── history ──
   undo(): void;
@@ -283,6 +324,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     dirty: false,
     selection: { blockIds: [], wireIds: [] },
     gridVisible: true,
+    minimapVisible: true,
     theme: loadStoredTheme(),
     paletteCollapsed: false,
     openMenu: null,
@@ -290,6 +332,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     placingKind: null,
     pointer: null,
     armedPort: null,
+    pendingDelete: null,
     past: [],
     future: [],
 
@@ -301,6 +344,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         filePath,
         dirty: false,
         selection: { blockIds: [], wireIds: [] },
+        pendingDelete: null,
         past: [],
         future: [],
       }),
@@ -311,6 +355,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         filePath: null,
         dirty: false,
         selection: { blockIds: [], wireIds: [] },
+        pendingDelete: null,
         past: [],
         future: [],
       }),
@@ -328,6 +373,8 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     // ── VIEW ──────────────────────────────────────────────────────────────
 
     toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
+    toggleMinimap: () =>
+      set((state) => ({ minimapVisible: !state.minimapVisible })),
 
     toggleTheme: () => {
       const theme: Theme = get().theme === "dark" ? "light" : "dark";
@@ -464,8 +511,15 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
               ports: block.ports.map((port) => ({ ...port })),
             };
             const min = minBlockSize(resized);
-            resized.width = Math.max(min.width, snapToGrid(width));
-            resized.height = Math.max(min.height, snapToGrid(height));
+            const snap = (target: number, current: number) =>
+              block.kind === "gate"
+                ? evenCellsToward(snapToGrid(target), current)
+                : snapToGrid(target);
+            resized.width = Math.max(min.width, snap(width, block.width));
+            resized.height = Math.max(min.height, snap(height, block.height));
+            // A gate's minimum depth follows its (just-changed) input face
+            // length — see minBlockSize — so re-check against the new size.
+            growToFitPorts(resized);
             // A module's clk/reset position, and every side's centering,
             // depend on the block's own size (normalizeFixedPorts,
             // centerPortGroups) — normally re-run after every `commit`, but
@@ -762,6 +816,31 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
       });
       set({ selection: { blockIds: [], wireIds: [] } });
     },
+
+    requestDeleteSelection: () => {
+      const { selection } = get();
+      if (selection.blockIds.length > 0) {
+        set({
+          pendingDelete: {
+            blockIds: [...selection.blockIds],
+            wireIds: [...selection.wireIds],
+          },
+        });
+      } else if (selection.wireIds.length > 0) {
+        get().deleteSelection();
+      }
+    },
+
+    confirmPendingDelete: () => {
+      const { pendingDelete } = get();
+      if (!pendingDelete) {
+        return;
+      }
+      set({ selection: pendingDelete, pendingDelete: null });
+      get().deleteSelection();
+    },
+
+    cancelPendingDelete: () => set({ pendingDelete: null }),
 
     // ── HISTORY ───────────────────────────────────────────────────────────
 

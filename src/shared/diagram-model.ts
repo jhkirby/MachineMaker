@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-02
@@ -289,6 +289,6 @@ export interface RtlDiagram {
  * @param title - Title for the new document.
  * @returns A diagram with no blocks or wires.
  */
-export function createEmptyDiagram(title = "Untitled Diagram"): RtlDiagram {
+export function createEmptyDiagram(title = "Untitled Schematic"): RtlDiagram {
   return { schemaVersion: DIAGRAM_SCHEMA_VERSION, title, blocks: [], wires: [] };
 }

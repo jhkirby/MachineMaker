@@ -1,12 +1,14 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-02
  * --------------------------------------------------------------------------- */
 
 import type { DiagramCommands } from "../state/use-diagram-commands";
+import { MAX_EDITOR_TABS } from "../../../shared/project-model";
 import { useDiagramStore, type Theme } from "../state/diagram-store";
+import { useTabStore } from "../state/tab-store";
 import NameInput from "./NameInput";
 import ToolbarMenu from "./ToolbarMenu";
 import ViewControls from "./ViewControls";
@@ -98,6 +100,10 @@ export default function Toolbar({ commands }: ToolbarProps) {
   const toggleTheme = useDiagramStore((s) => s.toggleTheme);
   const openMenu = useDiagramStore((s) => s.openMenu);
   const toggleMenu = useDiagramStore((s) => s.toggleMenu);
+  // New/Open/Import each open a new tab, so they're unavailable once the
+  // window holds its maximum number of tabs.
+  const tabsFull = useTabStore((s) => s.tabs.length >= MAX_EDITOR_TABS);
+  const fullTitle = `Close a tab first — at most ${MAX_EDITOR_TABS} can be open`;
   const closeMenu = useDiagramStore((s) => s.closeMenu);
 
   return (
@@ -106,6 +112,7 @@ export default function Toolbar({ commands }: ToolbarProps) {
         <button
           type="button"
           className="toolbar__icon-button"
+          data-hover-fx="nudge-left"
           disabled={!canUndo}
           onClick={commands.undo}
           title="Undo"
@@ -116,6 +123,7 @@ export default function Toolbar({ commands }: ToolbarProps) {
         <button
           type="button"
           className="toolbar__icon-button"
+          data-hover-fx="nudge-right"
           disabled={!canRedo}
           onClick={commands.redo}
           title="Redo"
@@ -130,10 +138,10 @@ export default function Toolbar({ commands }: ToolbarProps) {
           open={openMenu === "file"}
           onOpenChange={(open) => (open ? toggleMenu("file") : closeMenu())}
           items={[
-            { label: "New Schematic", onClick: () => void commands.newDiagram() },
-            { label: "New State Machine", onClick: commands.newStateMachine },
-            { label: "Open Schematic", onClick: () => void commands.open() },
-            { label: "Open State Machine", onClick: commands.openStateMachine },
+            { label: "New Schematic", onClick: () => void commands.newDiagram(), disabled: tabsFull, title: tabsFull ? fullTitle : undefined },
+            { label: "New State Machine", onClick: commands.newStateMachine, disabled: tabsFull, title: tabsFull ? fullTitle : undefined },
+            { label: "Open Schematic", onClick: () => void commands.open(), disabled: tabsFull, title: tabsFull ? fullTitle : undefined },
+            { label: "Open State Machine", onClick: commands.openStateMachine, disabled: tabsFull, title: tabsFull ? fullTitle : undefined },
           ]}
         />
         <ToolbarMenu
@@ -142,8 +150,8 @@ export default function Toolbar({ commands }: ToolbarProps) {
           open={openMenu === "import"}
           onOpenChange={(open) => (open ? toggleMenu("import") : closeMenu())}
           items={[
-            { label: "JSON", onClick: () => void commands.importSchematic("json") },
-            { label: "YAML", onClick: () => void commands.importSchematic("yaml") },
+            { label: "JSON", onClick: () => void commands.importSchematic("json"), disabled: tabsFull, title: tabsFull ? fullTitle : undefined },
+            { label: "YAML", onClick: () => void commands.importSchematic("yaml"), disabled: tabsFull, title: tabsFull ? fullTitle : undefined },
           ]}
         />
         <ToolbarMenu
@@ -173,6 +181,7 @@ export default function Toolbar({ commands }: ToolbarProps) {
         <button
           type="button"
           className="toolbar__icon-button"
+          data-hover-fx="spin-half"
           onClick={toggleTheme}
           title={
             theme === "dark"

@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-21
@@ -12,6 +12,8 @@ export interface ToolbarMenuItem {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  /** Tooltip — e.g. why the item is disabled. */
+  title?: string;
 }
 
 /** Props for {@link ToolbarMenu}. */
@@ -122,6 +124,7 @@ export default function ToolbarMenu({
               role="menuitem"
               className="toolbar-menu__item"
               disabled={item.disabled}
+              title={item.title}
               onClick={() => {
                 onOpenChange(false);
                 item.onClick();

@@ -1,0 +1,17 @@
+# CodeQL configuration shared by the local scan (security/run-codeql.ps1 /
+# run-codeql.sh) and the GitHub code-scanning workflow
+# (.github/workflows/codeql.yml), so both analyze exactly the same code.
+#
+# The query suite (security-extended) is passed by each caller rather than
+# set here: the GitHub action accepts the short alias "security-extended",
+# but the CLI only accepts the full suite path, so neither form works for
+# both.
+name: MachineMaker CodeQL config
+
+paths:
+  - src
+paths-ignore:
+  - out
+  - dist
+  - node_modules
+  - tst

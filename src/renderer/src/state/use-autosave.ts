@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-11-02
@@ -18,7 +18,7 @@ let rerun = false;
 
 /**
  * Write the current diagram to disk now if it has unsaved changes — to its
- * file, or to a new one in Documents/RTL Schematic if it has none yet (see
+ * file, or to a new one in Documents/MachineMaker if it has none yet (see
  * ProjectFileService.autosaveDiagram).
  *
  * @returns Resolves once the diagram on disk is up to date.

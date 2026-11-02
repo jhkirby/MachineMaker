@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-04
@@ -93,6 +93,7 @@ export default function ComponentPalette() {
         <button
           type="button"
           className="palette__toggle"
+          data-hover-fx={collapsed ? "nudge-right" : "nudge-left"}
           onClick={togglePalette}
           title={collapsed ? "Expand panel (Ctrl+L)" : "Collapse panel (Ctrl+L)"}
           aria-label={collapsed ? "Expand panel" : "Collapse panel"}

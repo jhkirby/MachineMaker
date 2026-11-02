@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-02
@@ -25,6 +25,12 @@
   --accent: #4c9ffe;
   --accent-hover: #6fb2ff;
   --danger: #e0655f;
+
+  /* How long a block's selection ring takes to grow in/shrink out — shared
+     by the rectangular ring (.rtl-block::after) and a gate's own
+     silhouette-shaped ring (.gate-symbol__selection-ring) so both feel the
+     same. Theme-independent, so it lives only here. */
+  --selection-ring-duration: 140ms;
 
   /* The soft halo behind an armed/connectable/incompatible port ring (see
      .rtl-port--armed etc. in app.css) — kept as its own token, at a fixed
@@ -83,6 +89,18 @@
      against its own light canvas, not just this value reused verbatim. */
   --selection-fill: rgba(200, 200, 220, 0.08);
   --selection-border: rgba(200, 200, 220, 0.8);
+
+  /* Home page (home.css): the deep backdrop gradient, the circuit traces
+     and their running light pulses, and the glow behind the logo. */
+  --home-backdrop-inner: #1b2440;
+  --home-backdrop-outer: #0d1018;
+  --home-trace: rgba(91, 141, 239, 0.22);
+  --home-pulse: #8fb4ff;
+  --home-glow: rgba(76, 159, 254, 0.45);
+  --home-card: rgba(30, 34, 44, 0.72);
+  --home-card-border: rgba(120, 150, 220, 0.22);
+  --home-title-from: #ffffff;
+  --home-title-to: #8fb4ff;
 
   /* Spacing scale. */
   --space-1: 4px;
@@ -158,4 +176,14 @@
      this theme's light canvas, that lighter grey read as barely-there. */
   --selection-fill: rgba(90, 90, 100, 0.14);
   --selection-border: rgba(90, 90, 100, 0.75);
+
+  --home-backdrop-inner: #ffffff;
+  --home-backdrop-outer: #dfe5f1;
+  --home-trace: rgba(47, 111, 224, 0.2);
+  --home-pulse: #2f6fe0;
+  --home-glow: rgba(47, 111, 224, 0.3);
+  --home-card: rgba(255, 255, 255, 0.78);
+  --home-card-border: rgba(47, 111, 224, 0.2);
+  --home-title-from: #1d2129;
+  --home-title-to: #2f6fe0;
 }

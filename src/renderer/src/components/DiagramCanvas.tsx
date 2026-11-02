@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-09-04
@@ -31,6 +31,7 @@ import {
   type NodeChange,
   type NodeMouseHandler,
   type OnNodeDrag,
+  type Viewport,
 } from "@xyflow/react";
 import { toPng } from "html-to-image";
 import type { BlockKind } from "../../../shared/diagram-model";
@@ -55,7 +56,11 @@ import {
 import { GRID_SIZE, snapPitchForZoom, snapToGrid } from "../model/grid";
 import { portPosition } from "../model/port-geometry";
 import { elbowPath, routeToPath, routeWires } from "../model/wire-router";
-import { useDiagramStore, type Theme } from "../state/diagram-store";
+import {
+  useDiagramStore,
+  type Selection,
+  type Theme,
+} from "../state/diagram-store";
 
 /** Top-left of a grid-snapped drag preview, in canvas (flow) coordinates. */
 interface DragPreviewState {
@@ -114,6 +119,10 @@ export interface CanvasHandle {
   toggleLock(): void;
   /** Clear every block/wire selection. */
   deselectAll(): void;
+  /** The current pan/zoom — saved per tab so switching back restores it. */
+  getViewport(): Viewport;
+  /** Jump straight to a saved pan/zoom (no animation). */
+  setViewport(viewport: Viewport): void;
 }
 
 /**
@@ -135,6 +144,7 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
   const diagram = useDiagramStore((s) => s.diagram);
   const selection = useDiagramStore((s) => s.selection);
   const gridVisible = useDiagramStore((s) => s.gridVisible);
+  const minimapVisible = useDiagramStore((s) => s.minimapVisible);
   const theme = useDiagramStore((s) => s.theme);
   const draggingKind = useDiagramStore((s) => s.draggingKind);
   const placingKind = useDiagramStore((s) => s.placingKind);
@@ -159,6 +169,12 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
   // pointer happened to release. Keyed by block id, covers a multi-select
   // drag as well as a single block.
   const dragOrigins = useRef<Map<string, { x: number; y: number }>>(new Map());
+  // The selection as it stood when the current click began — React Flow
+  // applies its own select/deselect for a node click (relayed into the store
+  // by onNodesChange) *before* onNodeClick runs, so a Ctrl+click toggle
+  // computed from the live selection would undo React Flow's change instead
+  // of making it, leaving the selection unchanged.
+  const pressSelection = useRef<Selection | null>(null);
   const [draggingIds, setDraggingIds] = useState<ReadonlySet<string>>(NO_IDS);
   const [invalidDragIds, setInvalidDragIds] = useState<ReadonlySet<string>>(NO_IDS);
 
@@ -349,7 +365,8 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
       if (!storeApi.getState().elementsSelectable) {
         return;
       }
-      const current = useDiagramStore.getState().selection;
+      const current =
+        pressSelection.current ?? useDiagramStore.getState().selection;
       const list = kind === "block" ? current.blockIds : current.wireIds;
       const nextList = additive
         ? list.includes(id)
@@ -675,6 +692,8 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
       zoomOut: () => flow.zoomOut({ duration: 150 }),
       toggleLock: toggleInteractivity,
       deselectAll: () => clearSelection(),
+      getViewport: () => flow.getViewport(),
+      setViewport: (viewport) => void flow.setViewport(viewport),
       exportPng: async () => {
         const currentNodes = flow.getNodes();
         const bounds = getNodesBounds(currentNodes);
@@ -724,7 +743,10 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
         setPlacePointer(null);
         setPointer(null);
       }}
-      onPointerDownCapture={onPlacePressCapture}
+      onPointerDownCapture={(event) => {
+        pressSelection.current = useDiagramStore.getState().selection;
+        onPlacePressCapture(event);
+      }}
       onMouseDownCapture={onPlacePressCapture}
       onDoubleClickCapture={onPlacePressCapture}
       onClickCapture={onPlaceClickCapture}
@@ -749,10 +771,14 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
         snapToGrid
         snapGrid={snapGrid}
         multiSelectionKeyCode={MULTI_SELECT_KEYS}
-        deleteKeyCode={["Delete", "Backspace"]}
+        // Delete/Backspace are handled by useKeyboardShortcuts instead, so a
+        // component goes through the confirmation popup rather than React
+        // Flow deleting it outright.
+        deleteKeyCode={null}
         defaultEdgeOptions={{ type: "rtlWire" }}
       >
         {gridVisible ? <AdaptiveGridBackground /> : null}
+        {minimapVisible ? (
         <MiniMap<RtlBlockNodeType>
           pannable
           zoomable
@@ -765,6 +791,7 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
           nodeStrokeWidth={3}
           nodeBorderRadius={2}
         />
+        ) : null}
       </ReactFlow>
 
       {preview && previewKind && previewTemplate && previewColors ? (

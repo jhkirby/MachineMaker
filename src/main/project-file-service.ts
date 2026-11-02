@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------------
- * Project:       RTL Schematic
+ * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
  * Last Modified: 2026-08-27
@@ -9,10 +9,13 @@ import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { app, dialog, type BrowserWindow } from "electron";
 import {
+  createEmptyDiagram,
   DIAGRAM_SCHEMA_VERSION,
   type RtlDiagram,
 } from "../shared/diagram-model";
+import { PROJECT_SCHEMATICS_DIR } from "../shared/project-model";
 import type {
+  CreateSchematicRequest,
   ExportImageRequest,
   FileDialogResult,
   ImportedSchematicFile,
@@ -24,7 +27,7 @@ const DIAGRAM_EXTENSION = "rtlproj";
 
 /** Folder under the user's Documents that new, never-saved diagrams
  *  autosave into. */
-const AUTOSAVE_FOLDER = "RTL Schematic";
+const AUTOSAVE_FOLDER = "MachineMaker";
 
 /** File extensions accepted for each importable schematic format. */
 const SCHEMATIC_EXTENSIONS: Record<SchematicFileFormat, string[]> = {
@@ -39,6 +42,13 @@ const SCHEMATIC_EXTENSIONS: Record<SchematicFileFormat, string[]> = {
  */
 export class ProjectFileService {
   /**
+   * @param autosaveFolder - Folder name, under Documents, for schematics
+   *   that aren't in a project — per channel, so dev and installed builds
+   *   never write into each other's (see app-channel.ts).
+   */
+  constructor(private readonly autosaveFolder: string = AUTOSAVE_FOLDER) {}
+
+  /**
    * Prompt for a `.rtlproj` file and load it.
    *
    * @param parent - Window the open dialog attaches to.
@@ -46,9 +56,11 @@ export class ProjectFileService {
    */
   async openDiagram(
     parent: BrowserWindow,
+    defaultPath?: string,
   ): Promise<FileDialogResult<RtlDiagram>> {
     const picked = await dialog.showOpenDialog(parent, {
       title: "Open RTL Diagram",
+      defaultPath,
       properties: ["openFile"],
       filters: [{ name: "RTL Diagram", extensions: [DIAGRAM_EXTENSION] }],
     });
@@ -97,7 +109,7 @@ export class ProjectFileService {
   /**
    * Save a diagram with no dialog — the autosave path. A diagram that
    * already has a file is written there; a new one gets a fresh file in
-   * Documents/RTL Schematic, named after its title (numbered if taken).
+   * Documents/MachineMaker, named after its title (numbered if taken).
    *
    * @param request - The diagram plus its existing path, if any.
    * @returns The path written.
@@ -107,7 +119,7 @@ export class ProjectFileService {
   ): Promise<FileDialogResult<RtlDiagram>> {
     let path = request.path;
     if (!path) {
-      const folder = join(app.getPath("documents"), AUTOSAVE_FOLDER);
+      const folder = join(app.getPath("documents"), this.autosaveFolder);
       await mkdir(folder, { recursive: true });
       const base = this.sanitizeName(request.diagram.title);
       path = join(folder, `${base}.${DIAGRAM_EXTENSION}`);
@@ -202,7 +214,7 @@ export class ProjectFileService {
     }
     return {
       schemaVersion: DIAGRAM_SCHEMA_VERSION,
-      title: typeof candidate.title === "string" ? candidate.title : "Untitled Diagram",
+      title: typeof candidate.title === "string" ? candidate.title : "Untitled Schematic",
       blocks: candidate.blocks,
       wires: candidate.wires,
     };
@@ -214,6 +226,52 @@ export class ProjectFileService {
    * @param path - The path to check.
    * @returns True if something is there.
    */
+  /**
+   * Read one schematic file by path, with no dialog.
+   *
+   * @param path - Absolute path of the `.rtlproj` file.
+   * @returns The parsed diagram.
+   * @throws {Error} If the file can't be read or isn't a valid diagram.
+   */
+  async loadDiagram(path: string): Promise<RtlDiagram> {
+    return this.parseDiagram(await readFile(path, "utf-8"));
+  }
+
+  /**
+   * Write a brand-new schematic file named after `request.name`, numbering
+   * it ("Name 2", "Name 3", ...) rather than ever overwriting an existing
+   * file. Goes in the project's schematics folder, or the loose autosave
+   * folder when there's no project.
+   *
+   * @param request - Where, what it's called, and optional starting content.
+   * @returns The written diagram and the path it landed at.
+   */
+  async createSchematic(
+    request: CreateSchematicRequest,
+  ): Promise<FileDialogResult<RtlDiagram>> {
+    const folder = request.projectPath
+      ? join(request.projectPath, PROJECT_SCHEMATICS_DIR)
+      : join(app.getPath("documents"), this.autosaveFolder);
+    await mkdir(folder, { recursive: true });
+    const base = this.sanitizeName(request.name);
+    let path = join(folder, `${base}.${DIAGRAM_EXTENSION}`);
+    for (let n = 2; await this.exists(path); n++) {
+      path = join(folder, `${base} ${n}.${DIAGRAM_EXTENSION}`);
+    }
+    const document: RtlDiagram = {
+      ...(request.diagram ?? createEmptyDiagram()),
+      title: request.name,
+      schemaVersion: DIAGRAM_SCHEMA_VERSION,
+    };
+    // "wx": fail rather than clobber, should a file appear between the
+    // existence check above and this write.
+    await writeFile(path, JSON.stringify(document, null, 2), {
+      encoding: "utf-8",
+      flag: "wx",
+    });
+    return { ok: true, path, data: document };
+  }
+
   private async exists(path: string): Promise<boolean> {
     try {
       await access(path);
