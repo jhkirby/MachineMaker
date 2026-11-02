@@ -17,6 +17,7 @@
   "dependencies": {
     "@xyflow/react": "^12.3.5",
     "nanoid": "^5.0.7",
+    "yaml": "^2.6.1",
     "zustand": "^5.0.1"
   },
   "devDependencies": {

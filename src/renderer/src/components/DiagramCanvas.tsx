@@ -18,8 +18,6 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
-  ControlButton,
-  Controls,
   MiniMap,
   ReactFlow,
   getNodesBounds,
@@ -54,7 +52,7 @@ import {
   toFlowNodes,
   type RtlBlockNode as RtlBlockNodeType,
 } from "../model/flow-adapters";
-import { snapPitchForZoom, snapToGrid } from "../model/grid";
+import { GRID_SIZE, snapPitchForZoom, snapToGrid } from "../model/grid";
 import { portPosition } from "../model/port-geometry";
 import { elbowPath, routeToPath, routeWires } from "../model/wire-router";
 import { useDiagramStore, type Theme } from "../state/diagram-store";
@@ -74,19 +72,6 @@ const NO_IDS: ReadonlySet<string> = new Set();
 /** Glide, don't jump, when the fit-view control recentres the diagram. */
 const FIT_VIEW_OPTIONS = { padding: 0.2, duration: 200 };
 
-/* Overrides React Flow's default Controls tooltips (bare "Zoom In" etc.,
-   @xyflow/system) to fold in each one's keyboard shortcut — see
-   use-keyboard-shortcuts.ts — matching the "(shortcut)" tooltip convention
-   already used elsewhere (e.g. Toolbar's theme toggle). The lock/interactive
-   button isn't listed here: it's replaced by a fully custom ControlButton
-   below since its tooltip text has to flip with lock state, which a single
-   static label can't do. */
-const CONTROLS_ARIA_LABELS = {
-  "controls.zoomIn.ariaLabel": "Zoom in (+)",
-  "controls.zoomOut.ariaLabel": "Zoom out (-)",
-  "controls.fitView.ariaLabel": "Fit view (C)",
-} as const;
-
 /** Hold Ctrl (or Cmd) to add/remove blocks from the current selection. */
 const MULTI_SELECT_KEYS = ["Control", "Meta"];
 
@@ -104,40 +89,6 @@ const CANVAS_SURFACE_COLOR: Record<Theme, string> = {
   dark: "#14161b",
   light: "#e8eaef",
 };
-
-/* Same 32-unit viewBox and filled-path style as React Flow's own built-in
-   Plus/Minus/FitView control icons (not exported by the library, so this
-   custom control button — see the grid-toggle button below — draws its own
-   grid glyph to match: a 2x2 grid of cells inside a border, out-and-back in
-   one path so it inherits `fill: currentColor` the same way the built-ins
-   do (app.css, CANVAS CONTROLS). */
-function GridIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-      <path d="M0 0h32v4.2H0zM0 13.9h32v4.2H0zM0 27.8h32v4.2H0zM0 0h4.2v32H0zM13.9 0h4.2v32h-4.2zM27.8 0h4.2v32h-4.2z" />
-    </svg>
-  );
-}
-
-/* React Flow's own Lock/Unlock glyphs (not exported by the library) for the
-   custom lock control button below — copied verbatim from its Controls
-   source so this reads as the exact same icon, just movable in the button
-   order. */
-function LockIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 32">
-      <path d="M21.333 10.667H19.81V7.619C19.81 3.429 16.38 0 12.19 0 8 0 4.571 3.429 4.571 7.619v3.048H3.048A3.056 3.056 0 000 13.714v15.238A3.056 3.056 0 003.048 32h18.285a3.056 3.056 0 003.048-3.048V13.714a3.056 3.056 0 00-3.048-3.047zM12.19 24.533a3.056 3.056 0 01-3.047-3.047 3.056 3.056 0 013.047-3.048 3.056 3.056 0 013.048 3.048 3.056 3.056 0 01-3.048 3.047zm4.724-13.866H7.467V7.619c0-2.59 2.133-4.724 4.723-4.724 2.591 0 4.724 2.133 4.724 4.724v3.048z" />
-    </svg>
-  );
-}
-
-function UnlockIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 32">
-      <path d="M21.333 10.667H19.81V7.619C19.81 3.429 16.38 0 12.19 0c-4.114 1.828-1.37 2.133.305 2.438 1.676.305 4.42 2.59 4.42 5.181v3.048H3.047A3.056 3.056 0 000 13.714v15.238A3.056 3.056 0 003.048 32h18.285a3.056 3.056 0 003.048-3.048V13.714a3.056 3.056 0 00-3.048-3.047zM12.19 24.533a3.056 3.056 0 01-3.047-3.047 3.056 3.056 0 013.047-3.048 3.056 3.056 0 013.048 3.048 3.056 3.056 0 01-3.048 3.047z" />
-    </svg>
-  );
-}
 
 /** zIndex given to a block while it's being dragged, so it always renders
  * above every other block instead of whatever stacking order it started in.
@@ -177,12 +128,6 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
   // Drag snapping tightens to the sub-cell grid once the viewer zooms in far
   // enough for those lines to be aimable; see AdaptiveGridBackground.
   const zoom = useStore((s) => s.transform[2]);
-  // Mirrors the selector React Flow's own Controls uses internally to decide
-  // which of the Lock/Unlock glyphs to show — kept in sync here too since the
-  // lock button below is a custom ControlButton, not the built-in one.
-  const isInteractive = useStore(
-    (s) => s.nodesDraggable || s.nodesConnectable || s.elementsSelectable,
-  );
   const snapGrid = useMemo((): [number, number] => {
     const pitch = snapPitchForZoom(zoom);
     return [pitch, pitch];
@@ -190,9 +135,11 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
   const diagram = useDiagramStore((s) => s.diagram);
   const selection = useDiagramStore((s) => s.selection);
   const gridVisible = useDiagramStore((s) => s.gridVisible);
-  const toggleGrid = useDiagramStore((s) => s.toggleGrid);
   const theme = useDiagramStore((s) => s.theme);
   const draggingKind = useDiagramStore((s) => s.draggingKind);
+  const placingKind = useDiagramStore((s) => s.placingKind);
+  const setPlacingKind = useDiagramStore((s) => s.setPlacingKind);
+  const setPointer = useDiagramStore((s) => s.setPointer);
   const armedPort = useDiagramStore((s) => s.armedPort);
   const setArmedPort = useDiagramStore((s) => s.setArmedPort);
   const moveBlock = useDiagramStore((s) => s.moveBlock);
@@ -504,6 +451,93 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
     [flow, addBlock, previewDropAt],
   );
 
+  // ── CLICK-TO-PLACE (PLACE MODE) ───────────────────────────────────────────
+
+  // Last pointer position over the canvas in client coordinates while in
+  // place mode; null when the pointer is off the canvas. Kept in screen
+  // space (not flow space) so a wheel zoom/pan with the pointer held still
+  // re-derives the landing spot below instead of leaving it stale.
+  const [placePointer, setPlacePointer] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!placingKind) {
+      setPlacePointer(null);
+    }
+  }, [placingKind]);
+
+  const placePreview = useMemo(() => {
+    if (!placingKind || !placePointer) {
+      return null;
+    }
+    const point = flow.screenToFlowPosition(placePointer);
+    return previewDropAt(placingKind, point.x, point.y);
+    // viewport and diagram aren't read directly, but a pan/zoom moves the
+    // landing spot under a still pointer and an edit can change whether it
+    // collides, so either must re-derive it.
+  },[placingKind, placePointer, flow, previewDropAt, viewport, diagram]);
+
+  // The canvas's own controls and minimap stay usable mid-placement — only
+  // clicks on the diagram surface itself are taken over.
+  const isPlacementTarget = useCallback(
+    (target: EventTarget) =>
+      !(
+        target instanceof Element &&
+        target.closest(".react-flow__controls, .react-flow__minimap")
+      ),
+    [],
+  );
+
+  // In place mode, swallow the press before React Flow sees it so it can't
+  // start a node drag, rubber-band selection, or pane pan. Caught on the
+  // capture phase for the same reason as onCanvasWheel below: React Flow's
+  // own listeners are native (d3), and this runs ahead of them.
+  const onPlacePressCapture = useCallback(
+    (event: ReactMouseEvent) => {
+      if (placingKind && isPlacementTarget(event.target)) {
+        event.stopPropagation();
+      }
+    },
+    [placingKind, isPlacementTarget],
+  );
+
+  const onPlaceClickCapture = useCallback(
+    (event: ReactMouseEvent) => {
+      if (!placingKind || !isPlacementTarget(event.target)) {
+        return;
+      }
+      event.stopPropagation();
+      const point = flow.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      const { x, y, invalid } = previewDropAt(placingKind, point.x, point.y);
+      if (invalid) {
+        // The red preview already says why; stay in place mode so the next
+        // click can try a free spot.
+        return;
+      }
+      addBlock(placingKind, x, y);
+      setPlacingKind(null);
+    },
+    [placingKind, isPlacementTarget, flow, previewDropAt, addBlock, setPlacingKind],
+  );
+
+  useEffect(() => {
+    if (!placingKind) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPlacingKind(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [placingKind, setPlacingKind]);
+
   // ── CLICK-TO-CONNECT PREVIEW ──────────────────────────────────────────────
 
   // The armed port's owning block/port, looked up fresh so a block move or
@@ -532,6 +566,24 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
 
   const onCanvasMouseMove = useCallback(
     (event: ReactMouseEvent) => {
+      if (placingKind) {
+        setPlacePointer({ x: event.clientX, y: event.clientY });
+      }
+      const point = flow.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      const box = event.currentTarget.getBoundingClientRect();
+      setPointer({
+        screen: {
+          x: Math.round(event.clientX - box.left),
+          y: Math.round(event.clientY - box.top),
+        },
+        cell: {
+          x: Math.floor(point.x / GRID_SIZE),
+          y: Math.floor(point.y / GRID_SIZE),
+        },
+      });
       if (!armedPort) {
         return;
       }
@@ -539,7 +591,7 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
         flow.screenToFlowPosition({ x: event.clientX, y: event.clientY }),
       );
     },
-    [armedPort, flow],
+    [armedPort, placingKind, flow, setPointer],
   );
 
   // Shift+scroll pans left/right, Ctrl+scroll pans up/down — both override
@@ -650,20 +702,32 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
     [flow, storeApi, clearSelection, theme, toggleInteractivity],
   );
 
-  const previewTemplate = draggingKind ? templateFor(draggingKind) : null;
-  const previewColors = dragPreview?.invalid
+  // A palette drag and place mode share the one preview element; a live drag
+  // wins if somehow both are active.
+  const previewKind = draggingKind ?? placingKind;
+  const preview = draggingKind ? dragPreview : placePreview;
+  const previewTemplate = previewKind ? templateFor(previewKind) : null;
+  const previewColors = preview?.invalid
     ? INVALID_PLACEMENT_PALETTE
-    : draggingKind
-      ? paletteFor(draggingKind, theme)
+    : previewKind
+      ? paletteFor(previewKind, theme)
       : null;
 
   return (
     <div
-      className="canvas"
+      className={`canvas${placingKind ? " canvas--placing" : ""}`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       onMouseMove={onCanvasMouseMove}
+      onMouseLeave={() => {
+        setPlacePointer(null);
+        setPointer(null);
+      }}
+      onPointerDownCapture={onPlacePressCapture}
+      onMouseDownCapture={onPlacePressCapture}
+      onDoubleClickCapture={onPlacePressCapture}
+      onClickCapture={onPlaceClickCapture}
       onWheelCapture={onCanvasWheel}
     >
       <ReactFlow
@@ -687,32 +751,8 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
         multiSelectionKeyCode={MULTI_SELECT_KEYS}
         deleteKeyCode={["Delete", "Backspace"]}
         defaultEdgeOptions={{ type: "rtlWire" }}
-        ariaLabelConfig={CONTROLS_ARIA_LABELS}
       >
         {gridVisible ? <AdaptiveGridBackground /> : null}
-        <Controls
-          position="top-right"
-          orientation="horizontal"
-          fitViewOptions={FIT_VIEW_OPTIONS}
-          showInteractive={false}
-        >
-          <ControlButton
-            className="react-flow__controls-gridtoggle"
-            onClick={toggleGrid}
-            title={gridVisible ? "Hide grid (Ctrl+G)" : "Show grid (Ctrl+G)"}
-            aria-label={gridVisible ? "Hide grid" : "Show grid"}
-          >
-            <GridIcon />
-          </ControlButton>
-          <ControlButton
-            className="react-flow__controls-interactive"
-            onClick={toggleInteractivity}
-            title={isInteractive ? "Lock canvas (L)" : "Unlock canvas (L)"}
-            aria-label={isInteractive ? "Lock canvas" : "Unlock canvas"}
-          >
-            {isInteractive ? <UnlockIcon /> : <LockIcon />}
-          </ControlButton>
-        </Controls>
         <MiniMap<RtlBlockNodeType>
           pannable
           zoomable
@@ -727,12 +767,12 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
         />
       </ReactFlow>
 
-      {dragPreview && draggingKind && previewTemplate && previewColors ? (
+      {preview && previewKind && previewTemplate && previewColors ? (
         <div
           className="drag-preview"
           style={{
-            left: dragPreview.x * viewport.zoom + viewport.x,
-            top: dragPreview.y * viewport.zoom + viewport.y,
+            left: preview.x * viewport.zoom + viewport.x,
+            top: preview.y * viewport.zoom + viewport.y,
             width: previewTemplate.defaultWidth * viewport.zoom,
             height: previewTemplate.defaultHeight * viewport.zoom,
             background: previewColors.fill,
@@ -741,7 +781,7 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
           }}
         >
           <span className="drag-preview__icon" style={{ color: previewColors.stroke }}>
-            <ComponentIcon kind={draggingKind} />
+            <ComponentIcon kind={previewKind} />
           </span>
           <span className="drag-preview__label">{previewTemplate.displayName}</span>
         </div>

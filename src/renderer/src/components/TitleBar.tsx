@@ -6,7 +6,6 @@
  * --------------------------------------------------------------------------- */
 
 import { useEffect, useState } from "react";
-import { useDiagramStore } from "../state/diagram-store";
 
 /**
  * Single horizontal bar glyph for the minimize button.
@@ -90,41 +89,40 @@ function CloseIcon() {
 
 /**
  * Custom window titlebar, replacing the native OS chrome (the window is
- * created with `frame: false` — see WindowManager). Draws the app icon and
- * document title over a draggable region, plus minimize/maximize/close
- * buttons that mirror the native ones' behavior via IPC.
+ * created with `frame: false` — see WindowManager). An empty draggable
+ * region plus minimize/maximize/close buttons that mirror the native ones'
+ * behavior via IPC; the buttons stay hidden until the pointer is over the
+ * bar (app.css, TITLEBAR). The document title already shows in the toolbar
+ * right below, so the bar itself carries no text.
  *
  * @returns The titlebar element.
  */
 export default function TitleBar() {
-  const title = useDiagramStore((s) => s.diagram.title);
-  const dirty = useDiagramStore((s) => s.dirty);
   const [maximized, setMaximized] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   useEffect(() => {
     void window.rtl.isWindowMaximized().then(setMaximized);
     return window.rtl.onWindowMaximizedChange(setMaximized);
   }, []);
 
+  // Pushed from the main process, not read from :hover — the drag region
+  // never sees mouse events (see WindowManager.watchTitlebarHover).
+  useEffect(() => window.rtl.onTitlebarHoverChange(setHovered), []);
+
   return (
-    <div className="titlebar">
+    <div className={`titlebar${hovered ? " titlebar--hovered" : ""}`}>
       <div
         className="titlebar__drag-region"
         onDoubleClick={() => void window.rtl.windowToggleMaximize()}
-      >
-        <img className="titlebar__icon" src="/icon.svg" alt="" aria-hidden="true" />
-        <span className="titlebar__text">
-          {dirty ? <span className="titlebar__dirty">●</span> : null}
-          {title} — RTL Schematic
-        </span>
-      </div>
+      />
       <div className="titlebar__controls">
         <button
           type="button"
           className="titlebar__button"
           onClick={() => void window.rtl.windowMinimize()}
           aria-label="Minimize"
-          title="Minimize"
+          title="Minimize (Ctrl+M)"
         >
           <MinimizeIcon />
         </button>
@@ -133,7 +131,9 @@ export default function TitleBar() {
           className="titlebar__button"
           onClick={() => void window.rtl.windowToggleMaximize()}
           aria-label={maximized ? "Restore" : "Maximize"}
-          title={maximized ? "Restore" : "Maximize"}
+          title={
+            maximized ? "Restore (Ctrl+Shift+M)" : "Maximize (Ctrl+Shift+M)"
+          }
         >
           {maximized ? <RestoreIcon /> : <MaximizeIcon />}
         </button>
@@ -142,7 +142,7 @@ export default function TitleBar() {
           className="titlebar__button titlebar__button--close"
           onClick={() => void window.rtl.windowClose()}
           aria-label="Close"
-          title="Close"
+          title="Close (Ctrl+W)"
         >
           <CloseIcon />
         </button>

@@ -40,8 +40,14 @@ export interface ComponentTemplate {
    * to {@link displayName} when omitted.
    */
   baseName?: string;
-  /** One-line hint shown as a tooltip in the palette. */
+  /** One-line description of what the component is for. */
   hint: string;
+  /**
+   * Bare key (lower-case, as `KeyboardEvent.key` reports it) that puts this
+   * component into place mode — see use-keyboard-shortcuts.ts, which builds
+   * its bindings from this, and the palette tooltip that advertises it.
+   */
+  placeKey: string;
   defaultWidth: number;
   defaultHeight: number;
   ports: PortTemplate[];
@@ -53,6 +59,7 @@ export interface ComponentTemplate {
 export const COMPONENT_LIBRARY: readonly ComponentTemplate[] = [
   {
     kind: "module",
+    placeKey: "m",
     displayName: "Module",
     hint: "Generic RTL submodule with configurable ports",
     defaultWidth: cells(12),
@@ -70,6 +77,7 @@ export const COMPONENT_LIBRARY: readonly ComponentTemplate[] = [
   },
   {
     kind: "register",
+    placeKey: "r",
     displayName: "Register",
     hint: "Edge-triggered flip-flop / pipeline register",
     defaultWidth: cells(10),
@@ -88,6 +96,7 @@ export const COMPONENT_LIBRARY: readonly ComponentTemplate[] = [
   },
   {
     kind: "gate",
+    placeKey: "g",
     displayName: "Gate",
     hint: "Logic gate (AND, OR, XOR, …)",
     defaultWidth: cells(8),
@@ -106,6 +115,7 @@ export const COMPONENT_LIBRARY: readonly ComponentTemplate[] = [
   },
   {
     kind: "io",
+    placeKey: "i",
     displayName: "I/O Port",
     baseName: "Port",
     hint: "Top-level input or output pin",
@@ -115,6 +125,7 @@ export const COMPONENT_LIBRARY: readonly ComponentTemplate[] = [
   },
   {
     kind: "constant",
+    placeKey: "k",
     displayName: "Constant",
     hint: "Tie-off / literal value",
     defaultWidth: cells(10),

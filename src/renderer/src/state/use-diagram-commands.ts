@@ -8,13 +8,27 @@
 import { useMemo, type RefObject } from "react";
 import type { EditorCommand } from "../../../shared/ipc-contract";
 import type { CanvasHandle } from "../components/DiagramCanvas";
+import {
+  parseSchematic,
+  serializeSchematic,
+  type SchematicFormat,
+} from "../model/schematic-iac";
 import { SvgExporter } from "../model/svg-exporter";
+import { saveNow } from "./use-autosave";
 import { useDiagramStore } from "./diagram-store";
 
 /** The set of high-level editor actions, callable from menu or toolbar. */
 export interface DiagramCommands {
-  newDiagram(): void;
+  newDiagram(): Promise<void>;
   open(): Promise<void>;
+  /** Placeholder until state machines exist; does nothing yet. */
+  newStateMachine(): void;
+  /** Placeholder until state machines exist; does nothing yet. */
+  openStateMachine(): void;
+  /** Build a new diagram from a JSON/YAML schematic file. */
+  importSchematic(format: SchematicFormat): Promise<void>;
+  /** Write the diagram as a JSON/YAML schematic file. */
+  exportSchematic(format: SchematicFormat): Promise<void>;
   save(): Promise<void>;
   saveAs(): Promise<void>;
   exportPng(): Promise<void>;
@@ -49,28 +63,9 @@ export function useDiagramCommands(
   return useMemo<DiagramCommands>(() => {
     const svgExporter = new SvgExporter();
 
-    /**
-     * Ask the user before discarding unsaved work.
-     *
-     * @returns True if it is safe to proceed.
-     */
-    const confirmDiscard = (): boolean => {
-      if (!useDiagramStore.getState().dirty) {
-        return true;
-      }
-      return window.confirm("Discard unsaved changes?");
-    };
-
-    const save = async (): Promise<void> => {
-      const { diagram, filePath, markSaved } = useDiagramStore.getState();
-      const result = await window.rtl.saveDiagram({
-        diagram,
-        path: filePath ?? undefined,
-      });
-      if (result.ok && result.path) {
-        markSaved(result.path);
-      }
-    };
+    // Diagrams autosave (use-autosave.ts), so there's never work to
+    // discard: switching documents just flushes the pending save first.
+    const save = saveNow;
 
     const saveAs = async (): Promise<void> => {
       const { diagram, markSaved } = useDiagramStore.getState();
@@ -81,9 +76,7 @@ export function useDiagramCommands(
     };
 
     const open = async (): Promise<void> => {
-      if (!confirmDiscard()) {
-        return;
-      }
+      await saveNow();
       const result = await window.rtl.openDiagram();
       if (result.ok && result.data && result.path) {
         useDiagramStore.getState().resetDocument(result.data, result.path);
@@ -91,10 +84,46 @@ export function useDiagramCommands(
       }
     };
 
-    const newDiagram = (): void => {
-      if (confirmDiscard()) {
-        useDiagramStore.getState().newDocument();
+    const newDiagram = async (): Promise<void> => {
+      await saveNow();
+      useDiagramStore.getState().newDocument();
+    };
+
+    const newStateMachine = (): void => undefined;
+    const openStateMachine = (): void => undefined;
+
+    const importSchematic = async (format: SchematicFormat): Promise<void> => {
+      const result = await window.rtl.importSchematic(format);
+      if (!result.ok || !result.data) {
+        return;
       }
+      let diagram;
+      try {
+        diagram = parseSchematic(result.data.text, result.data.format);
+      } catch (error) {
+        window.alert(
+          `Couldn't import that file.
+
+${error instanceof Error ? error.message : String(error)}`,
+        );
+        return;
+      }
+      await saveNow();
+      const store = useDiagramStore.getState();
+      store.resetDocument(diagram, null);
+      // A brand-new document that only exists in memory — mark it changed
+      // so autosave gives it a file right away.
+      useDiagramStore.setState({ dirty: true, diagram: { ...diagram } });
+      canvasRef.current?.fitView();
+    };
+
+    const exportSchematic = async (format: SchematicFormat): Promise<void> => {
+      const { diagram } = useDiagramStore.getState();
+      await window.rtl.exportImage({
+        format,
+        content: serializeSchematic(diagram, format),
+        suggestedName: diagram.title,
+      });
     };
 
     const exportSvg = async (): Promise<void> => {
@@ -149,6 +178,10 @@ export function useDiagramCommands(
     const commands: DiagramCommands = {
       newDiagram,
       open,
+      newStateMachine,
+      openStateMachine,
+      importSchematic,
+      exportSchematic,
       save,
       saveAs,
       exportPng,
@@ -167,8 +200,9 @@ export function useDiagramCommands(
       togglePalette,
       deselect,
       run: (command) => {
+        const togglePlacing = useDiagramStore.getState().togglePlacingKind;
         const table: Record<EditorCommand, () => void> = {
-          new: newDiagram,
+          new: () => void newDiagram(),
           open: () => void open(),
           save: () => void save(),
           "save-as": () => void saveAs(),
@@ -188,6 +222,26 @@ export function useDiagramCommands(
           "toggle-export-menu": toggleExportMenu,
           "toggle-palette": togglePalette,
           deselect,
+          // The title field lives in the toolbar's own tree; reaching it by
+          // its accessible label avoids threading a ref through App.
+          "place-module": () => togglePlacing("module"),
+          "place-register": () => togglePlacing("register"),
+          "place-gate": () => togglePlacing("gate"),
+          "place-io": () => togglePlacing("io"),
+          "place-constant": () => togglePlacing("constant"),
+          "focus-title": () => {
+            const field = document.querySelector<HTMLInputElement>(
+              'input[aria-label="Diagram title"]',
+            );
+            field?.focus();
+            field?.select();
+          },
+          "window-minimize": () => void window.rtl.windowMinimize(),
+          "window-toggle-maximize": () =>
+            void window.rtl.windowToggleMaximize(),
+          "window-close": () => void window.rtl.windowClose(),
+          "window-toggle-fullscreen": () =>
+            void window.rtl.windowToggleFullScreen(),
         };
         table[command]?.();
       },

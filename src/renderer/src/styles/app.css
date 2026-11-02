@@ -22,7 +22,11 @@ body,
   margin: 0;
 }
 
+/* Static text (labels, headings, the palette, the inspector's read-only
+   cells) is chrome, not content — dragging across it shouldn't paint a text
+   selection. Only real text-entry controls opt back in, below. */
 body {
+  user-select: none;
   font-family: var(--font-ui);
   font-size: 13px;
   color: var(--text-primary);
@@ -44,9 +48,36 @@ button:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
+/* No focus ring anywhere. Chromium's default one (orange in dark mode) is
+   left on a button after it's clicked and clashes with every theme, and
+   every control here already has its own hover/focus/active cue. !important
+   because library styles (React Flow nodes, edges, controls) set their own
+   :focus-visible outlines at higher specificity. */
+*:focus,
+*:focus-visible {
+  outline: none !important;
+}
+
+/* ── THEME TRANSITION ─────────────────────────────────────────────────────── */
+
+/* The theme toggle swaps themes inside a view transition (toggleTheme in
+   diagram-store.ts), so the browser cross-fades a snapshot of the old page
+   into the new one. This only sets how long that fade takes. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 300ms;
+  animation-timing-function: ease;
+}
+
 button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
 }
 
 input,
@@ -87,6 +118,60 @@ select option:checked,
 select option:hover {
   background: var(--block-stroke, var(--accent));
   color: #fff;
+}
+
+/* Chromium's native number spinners can't be themed. Hidden everywhere;
+   the fields that want stepping draw their own (.stepper, below). */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* A number input with the app's own up/down buttons tucked inside its
+   right edge (StepButtons, InspectorPanel.tsx). */
+/* Sized to its content: room for the widest value the field accepts
+   (--stepper-digits, set inline from the field's max) plus the buttons —
+   not stretched across the column. */
+.stepper {
+  position: relative;
+  display: inline-block;
+  align-self: flex-start;
+}
+
+.stepper input {
+  width: calc(var(--stepper-digits, 2) * 1ch + var(--space-2) + 24px + 2px);
+  padding-right: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepper__buttons {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  bottom: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.stepper__button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+}
+
+.stepper__button:hover:not(:disabled) {
+  color: #fff;
+  background: var(--block-stroke, var(--accent));
+  border-color: var(--block-stroke, var(--accent));
 }
 
 /* Flagged by NameInput / NumericField while the current text breaks the rules. */
@@ -203,42 +288,26 @@ input.is-invalid:focus {
 
 .titlebar__drag-region {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   min-width: 0;
-  padding: 0 var(--space-3);
-  /* Lets the window icon + title shrink and ellipsize before ever crowding
-     the control buttons, which must stay fixed-size and fully clickable. */
-  overflow: hidden;
 }
 
-.titlebar__icon {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-  /* Purely decorative — the region behind it is still the drag handle. */
-  pointer-events: none;
-}
-
-.titlebar__text {
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.titlebar__dirty {
-  color: var(--accent);
-  margin-right: var(--space-1);
-}
-
+/* Hidden until the pointer is over the bar. The hovered class comes from the
+   main process (WindowManager.watchTitlebarHover) because the drag region
+   never sees mouse events; :hover still covers the buttons themselves, which
+   are no-drag and do get them. Opacity (not display/visibility) so they
+   stay clickable and keep their space while fading. */
 .titlebar__controls {
   flex-shrink: 0;
   display: flex;
   /* Buttons are the one part of the bar that must NOT drag the window. */
   -webkit-app-region: no-drag;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.titlebar--hovered .titlebar__controls,
+.titlebar__controls:hover {
+  opacity: 1;
 }
 
 .titlebar__button {
@@ -263,6 +332,53 @@ input.is-invalid:focus {
 .titlebar__button--close:hover {
   background: var(--danger);
   color: #fff;
+}
+
+/* ── STATUS BAR ───────────────────────────────────────────────────────────── */
+
+/* Read-only stats along the bottom (StatusBar.tsx): groups of label/value
+   pairs from the left edge, each group split from the next by a thin rule. */
+.status-bar {
+  height: var(--status-bar-height, 24px);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-1);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--surface-panel);
+  border-top: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.status-bar__group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+}
+
+.status-bar__group + .status-bar__group {
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* Baseline-aligned so the (mono) number sits on the same line as its
+   (UI-font) label instead of riding up on the taller font's box. */
+.status-bar__stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+/* Values in the mono font with fixed-width digits, so a count ticking up
+   or the cursor readout changing doesn't jiggle everything after it. */
+.status-bar__value {
+  font-family: var(--font-mono);
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
 
 /* ── TOOLBAR ──────────────────────────────────────────────────────────────── */
@@ -302,10 +418,6 @@ input.is-invalid:focus {
 .toolbar__doc-input:focus {
   color: var(--text-primary);
   background: var(--surface-input);
-}
-
-.toolbar__dirty {
-  color: var(--accent);
 }
 
 .toolbar__actions {
@@ -411,9 +523,18 @@ input.is-invalid:focus {
   margin-bottom: var(--space-4);
 }
 
+/* On the rail the toggle sits above the icon squares, matching their size,
+   with a rule underneath separating it from them. */
 .palette--collapsed .palette__header {
   justify-content: center;
-  margin-bottom: 0;
+  margin: 0 6px;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.palette--collapsed .palette__toggle {
+  width: 28px;
+  height: 28px;
 }
 
 .palette__heading,
@@ -479,7 +600,6 @@ input.is-invalid:focus {
   border: 1px solid var(--border-subtle);
   border-left-width: 3px;
   padding: var(--space-2) var(--space-3);
-  cursor: grab;
   transition:
     background 120ms ease,
     border-color 120ms ease,
@@ -493,8 +613,38 @@ input.is-invalid:focus {
 }
 
 .palette__item:active {
-  cursor: grabbing;
   transform: translateX(1px);
+}
+
+/* Collapsed to the rail: icon-only squares, still clickable, draggable,
+   and colored by their left border like the full rows. No hover nudge —
+   the rail has no room for it. */
+.palette--collapsed .palette__list {
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.palette--collapsed .palette__item {
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  gap: 0;
+}
+
+.palette--collapsed .palette__item:hover:not(:disabled),
+.palette--collapsed .palette__item--placing {
+  transform: none;
+}
+
+/* The item whose block is currently in place mode — held in the hovered
+   look so it's clear what's attached to the pointer and that clicking it
+   again backs out. */
+.palette__item--placing,
+.palette__item--placing:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--accent);
+  transform: translateX(3px);
 }
 
 .palette__icon-slot {
@@ -559,52 +709,46 @@ input.is-invalid:focus {
   border: 1px dotted var(--selection-border);
 }
 
+/* ── CURSORS ──────────────────────────────────────────────────────────────── */
+
+/* The app's own grab/grabbing hands, replacing the OS ones on the canvas
+   and palette: rounded line art in the same stroke style as the toolbar
+   icons, a light line on a dark halo (swapped in light mode) so the hand
+   reads on top of any block color or grid. The hotspot is the palm's
+   centre (12 12). The keyword after each url is the fallback if the image
+   ever fails to load. */
+:root {
+  --cursor-grab: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='-1 -1 26 26' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0 M14 10V4a2 2 0 0 0-4 0v2 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15' stroke='%2314161b' stroke-width='4.5'/%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0 M14 10V4a2 2 0 0 0-4 0v2 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15' stroke='%23ffffff' stroke-width='1.9'/%3E%3C/svg%3E") 12 12, grab;
+  --cursor-grabbing: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='-1 -1 26 26' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-4 0v1.4 M14 10V8a2 2 0 0 0-4 0v2 M10 9.9V9a2 2 0 0 0-4 0v5 M6 14a2 2 0 0 0-4 0 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0' stroke='%2314161b' stroke-width='4.5'/%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-4 0v1.4 M14 10V8a2 2 0 0 0-4 0v2 M10 9.9V9a2 2 0 0 0-4 0v5 M6 14a2 2 0 0 0-4 0 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0' stroke='%23ffffff' stroke-width='1.9'/%3E%3C/svg%3E") 12 12, grabbing;
+}
+
+:root[data-theme="light"] {
+  --cursor-grab: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='-1 -1 26 26' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0 M14 10V4a2 2 0 0 0-4 0v2 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15' stroke='%23ffffff' stroke-width='4.5'/%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0 M14 10V4a2 2 0 0 0-4 0v2 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15' stroke='%231c1f26' stroke-width='1.9'/%3E%3C/svg%3E") 12 12, grab;
+  --cursor-grabbing: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='-1 -1 26 26' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-4 0v1.4 M14 10V8a2 2 0 0 0-4 0v2 M10 9.9V9a2 2 0 0 0-4 0v5 M6 14a2 2 0 0 0-4 0 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0' stroke='%23ffffff' stroke-width='4.5'/%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-4 0v1.4 M14 10V8a2 2 0 0 0-4 0v2 M10 9.9V9a2 2 0 0 0-4 0v5 M6 14a2 2 0 0 0-4 0 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0' stroke='%231c1f26' stroke-width='1.9'/%3E%3C/svg%3E") 12 12, grabbing;
+}
+
+/* Prefixed with .canvas to out-rank React Flow's own `cursor: grab`
+   rules (@xyflow/react style.css). */
+.canvas .react-flow__pane.draggable,
+.canvas .react-flow__node.draggable,
+.canvas .react-flow__nodesselection-rect,
+.palette__item {
+  cursor: var(--cursor-grab);
+}
+
+.canvas .react-flow__pane.dragging,
+.canvas .react-flow__node.draggable.dragging,
+.palette__item:active,
+.rtl-block:active {
+  cursor: var(--cursor-grabbing);
+}
+
 /* ── MINIMAP ──────────────────────────────────────────────────────────────── */
 
 .canvas .react-flow__minimap {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius);
   overflow: hidden;
-}
-
-/* ── CANVAS CONTROLS ──────────────────────────────────────────────────────── */
-
-/* Dark, circular, well-spaced zoom / fit / lock buttons in the top-right. The
-   stock control is a white pill with a single divider border per button; these
-   rules give each one a full light-grey ring that turns blue on hover. The
-   compound selectors below out-specify React Flow's own horizontal-layout
-   rule, which otherwise re-adds a right-only border. */
-.canvas .react-flow__controls {
-  gap: var(--space-3);
-  box-shadow: none;
-  background: transparent;
-}
-
-.canvas .react-flow__controls-button,
-.canvas .react-flow__controls.horizontal .react-flow__controls-button {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  background: var(--surface-raised);
-  color: var(--text-primary);
-  box-shadow: none;
-}
-
-.canvas .react-flow__controls-button:hover,
-.canvas .react-flow__controls.horizontal .react-flow__controls-button:hover {
-  background: var(--hover-highlight);
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-}
-
-.canvas .react-flow__controls-button svg {
-  width: 13px;
-  height: 13px;
-  max-width: 13px;
-  max-height: 13px;
-  fill: currentColor;
 }
 
 /* ── DRAG PREVIEW ─────────────────────────────────────────────────────────── */
@@ -625,6 +769,13 @@ input.is-invalid:focus {
   font-size: 12px;
   font-weight: 600;
   pointer-events: none;
+}
+
+/* In place mode the preview itself marks where the block will go, so the
+   pointer drops React Flow's grab/pointer cursors for a plain crosshair. */
+.canvas.canvas--placing .react-flow__pane,
+.canvas.canvas--placing .react-flow__node {
+  cursor: crosshair;
 }
 
 /* ── RTL BLOCK NODE ───────────────────────────────────────────────────────── */
@@ -688,8 +839,26 @@ input.is-invalid:focus {
   opacity: 0.12;
 }
 
-.rtl-block:active {
-  cursor: grabbing;
+/* A gate draws its own shape-matched hover fill instead (GateSymbol's
+   .gate-symbol__hover-fill, below) — this generic rectangle would otherwise
+   spill past a gate's curved/D-shaped body, showing as a box around the
+   symbol rather than a lighten of it (see the AND/OR/XOR body path this
+   overlay would miss). */
+.rtl-block.is-gate::before {
+  content: none;
+}
+
+/* Same 0.12 lighten as every other block's ::before, opacity-toggled by the
+   same hover condition, but painted as a second copy of the gate's own body
+   path (GateSymbol.tsx) so it fills the exact silhouette instead of the
+   block's bounding box. */
+.gate-symbol__hover-fill {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.rtl-block:hover:not(:has(.rtl-port:hover)) .gate-symbol__hover-fill {
+  opacity: 0.12;
 }
 
 /* Selection ring — drawn as its own overlay pseudo-element, painted on top
@@ -1036,6 +1205,16 @@ input.is-invalid:focus {
   transition: visibility 0s linear 220ms;
 }
 
+/* Scrolls with the wheel but draws no scrollbar — the panel is narrow and
+   the bar only ever covered content. */
+.inspector {
+  scrollbar-width: none;
+}
+
+.inspector::-webkit-scrollbar {
+  display: none;
+}
+
 .inspector--open {
   visibility: visible;
   transition: visibility 0s linear 0s;
@@ -1212,6 +1391,31 @@ input.is-invalid:focus {
   width: auto;
 }
 
+/* ── LINK SECTION ─────────────────────────────────────────────────────────── */
+
+/* A module block's Link section (InspectorPanel.tsx), between Ports and
+   Color: a one-line status plus its action buttons. */
+.link-section__status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.link-section__name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.link-section__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.link-section__actions button {
+  flex: 1;
+}
+
 /* ── PORT TABLE ───────────────────────────────────────────────────────────── */
 
 /* padding-right matches .port-list's own combined inset below (its
@@ -1304,11 +1508,13 @@ input.is-invalid:focus {
   color: var(--text-muted);
 }
 
-/* No spin buttons — the column is too narrow and the value is typed anyway. */
-.port-row__width::-webkit-inner-spin-button,
-.port-row__width::-webkit-outer-spin-button {
-  appearance: none;
-  margin: 0;
+/* Port and color values sit centred in their (narrow) boxes. */
+.port-row input {
+  text-align: center;
+}
+
+.port-row .dropdown__trigger {
+  justify-content: center;
 }
 
 .port-row__remove {
@@ -1501,39 +1707,168 @@ input.is-invalid:focus {
 
 .color-picker__controls {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-2);
 }
 
-/* The browser/OS's own color dialog trigger — this *is* the "graphical
-   color selector": a swatch button that opens a full hue/saturation picker
-   on click, with no custom canvas-based picker to build or maintain. */
-.color-picker__native {
-  width: 32px;
-  height: 32px;
+/* The current color, as a plain chip — the wheel above is now the visual
+   picker, so this is just a readout next to the numbers. */
+.color-picker__preview {
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
-  padding: 2px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
+}
+
+/* A small caption over each of Hex / R / G / B, the same pattern .field
+   uses for the inspector's other labelled inputs. */
+.color-picker__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Looks like one input but is a wrapper: the "#" is a fixed label inside
+   the border and only the six digits are editable (ColorPicker.tsx). Sized
+   to its content (the input is exactly 6ch of monospace) rather than
+   stretching, so the box is never wider than a hex value needs. */
+.color-picker__hex {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 var(--space-2);
+  font-family: var(--font-mono);
   background: var(--surface-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.color-picker__hex:hover,
+.color-picker__hex:focus-within {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+.color-picker__hex.is-invalid {
+  border-color: var(--danger);
+}
+
+.color-picker__hex-prefix {
+  color: var(--text-muted);
+}
+
+/* The wrapper draws the border; the input itself is bare text. */
+.color-picker__hex input,
+.color-picker__hex input:hover,
+.color-picker__hex input:focus {
+  /* Exactly 6ch clipped the last digit (the input keeps a sliver of its
+     own text inset), so leave a little slack. */
+  width: 7.5ch;
+  padding: 0;
+  font-family: inherit;
+  text-align: center;
+  text-transform: lowercase;
+  background: transparent;
+  border: none;
+}
+
+.color-picker__channel {
+  width: 40px;
+  height: 26px;
+  padding: 0 2px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+/* Hue ring with the saturation/value square centred in its hole. Size and
+   ring thickness come from ColorPicker.tsx as inline styles, since the
+   component also needs them to turn pointer positions into colors. */
+.color-picker__wheel {
+  position: relative;
+  align-self: center;
+  touch-action: none;
+}
+
+/* Hue increases clockwise from red at the top — the same direction the
+   component's pointer math (atan2 from the top) assumes. The mask punches
+   out the middle so only a ring of the gradient is left. */
+.color-picker__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--ring-width) - 0.5px),
+    #000 calc(100% - var(--ring-width))
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--ring-width) - 0.5px),
+    #000 calc(100% - var(--ring-width))
+  );
   cursor: pointer;
 }
 
-/* Cross-browser reset for the color swab a native color input paints
-   inside itself, so it fills this button's own padded box edge-to-edge
-   instead of leaving the UA's own inset border around a smaller square. */
-.color-picker__native::-webkit-color-swatch-wrapper {
-  padding: 0;
+/* White-to-hue left to right (saturation), then a black fade over it from
+   the bottom (value). --hue-color is the ring's current hue at full
+   saturation and brightness, set inline by the component. */
+.color-picker__square {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 4px;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, var(--hue-color));
+  cursor: crosshair;
 }
 
-.color-picker__native::-webkit-color-swatch {
-  border: none;
-  border-radius: 3px;
+/* The drag handle on both the ring and the square: a hollow white circle
+   with a faint dark edge so it stays visible over light and dark colors. */
+.color-picker__thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
-.color-picker__hex {
-  flex: 1;
-  min-width: 0;
+/* ── TOOLTIP ──────────────────────────────────────────────────────────────── */
+
+/* Drawn by TooltipLayer.tsx in place of every native `title` tooltip,
+   which Chromium won't let CSS style. Positioned with inline left/top
+   (viewport coordinates); hidden until that position has been measured so
+   it never flashes in the corner first. */
+.tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: 280px;
+  padding: 3px 8px;
   font-family: var(--font-mono);
-  text-transform: lowercase;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  white-space: pre-line;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.tooltip--visible {
+  opacity: 1;
 }

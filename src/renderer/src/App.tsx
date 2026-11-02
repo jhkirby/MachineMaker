@@ -9,9 +9,12 @@ import { useEffect, useRef } from "react";
 import ComponentPalette from "./components/ComponentPalette";
 import DiagramCanvas, { type CanvasHandle } from "./components/DiagramCanvas";
 import InspectorPanel from "./components/InspectorPanel";
+import StatusBar from "./components/StatusBar";
 import TitleBar from "./components/TitleBar";
 import Toolbar from "./components/Toolbar";
+import TooltipLayer from "./components/TooltipLayer";
 import { useDiagramStore } from "./state/diagram-store";
+import { useAutosave } from "./state/use-autosave";
 import { useDiagramCommands } from "./state/use-diagram-commands";
 import { useKeyboardShortcuts } from "./state/use-keyboard-shortcuts";
 
@@ -45,6 +48,7 @@ export default function App() {
   }, [theme]);
 
   useKeyboardShortcuts(commands);
+  useAutosave();
 
   return (
     <div className="app">
@@ -59,6 +63,8 @@ export default function App() {
         <DiagramCanvas ref={canvasRef} />
         <InspectorPanel />
       </div>
+      <StatusBar />
+      <TooltipLayer />
     </div>
   );
 }

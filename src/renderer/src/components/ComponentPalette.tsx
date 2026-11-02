@@ -57,8 +57,10 @@ function PanelToggleIcon({ direction }: { direction: "left" | "right" }) {
 }
 
 /**
- * Left sidebar listing every component. Each entry can be dragged onto the
- * canvas or double-clicked to drop one near the origin. A header button
+ * Left sidebar listing every component. Clicking an entry enters place mode
+ * (the block follows the pointer until a canvas click drops it); entries can
+ * also be dragged onto the canvas or double-clicked to drop one near the
+ * origin. A header button
  * collapses the panel to a slim rail and expands it again.
  *
  * @returns The palette element.
@@ -68,6 +70,10 @@ export default function ComponentPalette() {
   const collapsed = useDiagramStore((s) => s.paletteCollapsed);
   const togglePalette = useDiagramStore((s) => s.togglePalette);
   const setDraggingKind = useDiagramStore((s) => s.setDraggingKind);
+  const placingKind = useDiagramStore((s) => s.placingKind);
+  // Click toggles place mode: the same item turns it off, a different item
+  // switches what's being placed. The canvas does the rest (DiagramCanvas).
+  const togglePlacingKind = useDiagramStore((s) => s.togglePlacingKind);
 
   const onDragStart = (event: DragEvent, kind: BlockKind) => {
     event.dataTransfer.setData(PALETTE_DRAG_TYPE, kind);
@@ -95,35 +101,42 @@ export default function ComponentPalette() {
         </button>
       </div>
 
-      {!collapsed ? (
-        <ul className="palette__list">
-          {COMPONENT_LIBRARY.map((template) => {
-            const colors = paletteFor(template.kind);
-            return (
-              <li key={template.kind}>
-                <button
-                  type="button"
-                  className="palette__item"
-                  title={template.hint}
-                  draggable
-                  onDragStart={(event) => onDragStart(event, template.kind)}
-                  onDragEnd={onDragEnd}
-                  onDoubleClick={() => addBlock(template.kind, 80, 80)}
-                  style={{ borderLeftColor: colors.stroke }}
+      {/* Still listed when collapsed — just as icons, so the rail stays a
+          working palette rather than an empty strip. */}
+      <ul className="palette__list">
+        {COMPONENT_LIBRARY.map((template) => {
+          const colors = paletteFor(template.kind);
+          return (
+            <li key={template.kind}>
+              <button
+                type="button"
+                className={`palette__item${
+                  placingKind === template.kind ? " palette__item--placing" : ""
+                }`}
+                title={`Add ${template.displayName} (${template.placeKey.toUpperCase()})`}
+                aria-label={`Add ${template.displayName}`}
+                aria-pressed={placingKind === template.kind}
+                draggable
+                onClick={() => togglePlacingKind(template.kind)}
+                onDragStart={(event) => onDragStart(event, template.kind)}
+                onDragEnd={onDragEnd}
+                onDoubleClick={() => addBlock(template.kind, 80, 80)}
+                style={{ borderLeftColor: colors.stroke }}
+              >
+                <span
+                  className="palette__icon-slot"
+                  style={{ color: colors.stroke }}
                 >
-                  <span
-                    className="palette__icon-slot"
-                    style={{ color: colors.stroke }}
-                  >
-                    <ComponentIcon kind={template.kind} />
-                  </span>
+                  <ComponentIcon kind={template.kind} />
+                </span>
+                {!collapsed ? (
                   <span className="palette__label">{template.displayName}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+                ) : null}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </aside>
   );
 }

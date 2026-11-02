@@ -5,6 +5,7 @@
  * Last Modified: 2026-09-04
  * --------------------------------------------------------------------------- */
 
+import { flushSync } from "react-dom";
 import { create } from "zustand";
 import type { Connection } from "@xyflow/react";
 import {
@@ -13,6 +14,7 @@ import {
   formatBusWidth,
   isClockPort,
   isResetPort,
+  moduleDefinitionFromBlock,
   GATE_MAX_INPUTS,
   GATE_MIN_INPUTS,
   MAX_PORTS,
@@ -50,6 +52,12 @@ export interface Selection {
 export interface ArmedPort {
   blockId: string;
   portId: string;
+}
+
+/** Pointer location over the canvas — see {@link DiagramStore.pointer}. */
+export interface PointerPosition {
+  screen: { x: number; y: number };
+  cell: { x: number; y: number };
 }
 
 /** The app's color scheme — see the `[data-theme]` block in tokens.css. */
@@ -95,13 +103,27 @@ export interface DiagramStore {
    * own component tree, the same way toggleGrid/toggleTheme already do for
    * their own toolbar controls.
    */
-  openMenu: "file" | "export" | null;
+  openMenu: "file" | "import" | "export" | null;
   /**
    * Kind currently being dragged out of the palette, or null when no
    * palette drag is in progress. The canvas watches this to render a
    * grid-snapped preview of where the block would land.
    */
   draggingKind: BlockKind | null;
+  /**
+   * Kind waiting to be placed by click: a palette click enters this "place
+   * mode", the canvas shows the block following the pointer, and the next
+   * canvas click on a free spot drops it. Null when not in place mode —
+   * cleared by a successful placement, re-clicking the palette item, or Esc.
+   */
+  placingKind: BlockKind | null;
+  /**
+   * Where the pointer is while it's over the canvas, for the status bar;
+   * null when it's elsewhere. `screen` is in pixels from the canvas's own
+   * top-left (unaffected by pan/zoom); `cell` is the diagram grid square
+   * under it (follows pan/zoom).
+   */
+  pointer: PointerPosition | null;
   /**
    * Port armed by a click-to-connect gesture, waiting for a second click on a
    * compatible port to complete a wire (or Escape to cancel). Null when no
@@ -115,6 +137,12 @@ export interface DiagramStore {
   resetDocument(diagram: RtlDiagram, filePath: string | null): void;
   newDocument(): void;
   markSaved(filePath: string): void;
+  /**
+   * Record an autosave of `saved` to `filePath`. Only clears `dirty` if the
+   * diagram is still exactly the one that was written — an edit made while
+   * the write was in flight keeps the document dirty for the next save.
+   */
+  markAutosaved(filePath: string, saved: RtlDiagram): void;
   setTitle(title: string): void;
 
   // ── view ──
@@ -122,9 +150,17 @@ export interface DiagramStore {
   toggleTheme(): void;
   togglePalette(): void;
   /** Open the given toolbar menu, or close it if it's already the open one. */
-  toggleMenu(menu: "file" | "export"): void;
+  toggleMenu(menu: "file" | "import" | "export"): void;
   closeMenu(): void;
   setDraggingKind(kind: BlockKind | null): void;
+  /** Enter place mode for `kind`, or leave it when passed null. */
+  setPlacingKind(kind: BlockKind | null): void;
+  /**
+   * Enter place mode for `kind`, or leave it if `kind` is already the one
+   * being placed — what a palette click and its keyboard shortcut both do.
+   */
+  togglePlacingKind(kind: BlockKind): void;
+  setPointer(pointer: PointerPosition | null): void;
   setArmedPort(port: ArmedPort | null): void;
 
   // ── blocks ──
@@ -139,6 +175,13 @@ export interface DiagramStore {
    *   block's kind default (see resolvePalette in model/block-appearance.ts).
    */
   updateBlockColor(id: string, color: string | undefined): void;
+  /**
+   * Live-preview a color without its own undo step — the color wheel's
+   * drag, the same way {@link previewResizeBlock} works for size: call
+   * {@link beginInteraction} once when the drag starts, then this on every
+   * move.
+   */
+  previewBlockColor(id: string, color: string): void;
   /**
    * Live-preview a resize without its own undo step — same idea as
    * {@link moveBlock} during a drag: call {@link beginInteraction} once when
@@ -155,6 +198,13 @@ export interface DiagramStore {
   setModuleSequential(blockId: string, sequential: boolean): void;
   setGateType(blockId: string, gateType: GateType): void;
   setGateRotation(blockId: string, gateRotation: GateRotation): void;
+  /**
+   * Make a new module definition from a module block's current name and
+   * ports, and link the block to it.
+   */
+  createModuleFromBlock(blockId: string): void;
+  /** Detach a module block from whatever module it was linked to. */
+  unlinkModule(blockId: string): void;
 
   // ── wires ──
   connect(connection: Connection): void;
@@ -237,6 +287,8 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     paletteCollapsed: false,
     openMenu: null,
     draggingKind: null,
+    placingKind: null,
+    pointer: null,
     armedPort: null,
     past: [],
     future: [],
@@ -265,23 +317,44 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
 
     markSaved: (filePath) => set({ filePath, dirty: false }),
 
+    markAutosaved: (filePath, saved) =>
+      set((state) => ({
+        filePath,
+        dirty: state.diagram === saved ? false : state.dirty,
+      })),
+
     setTitle: (title) => commit((draft) => void (draft.title = title)),
 
     // ── VIEW ──────────────────────────────────────────────────────────────
 
     toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
 
-    toggleTheme: () =>
-      set((state) => {
-        const theme: Theme = state.theme === "dark" ? "light" : "dark";
-        try {
-          window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-        } catch {
-          // Best-effort persistence — a restrictive webview shouldn't block
-          // the toggle itself from working for the rest of the session.
-        }
-        return { theme };
-      }),
+    toggleTheme: () => {
+      const theme: Theme = get().theme === "dark" ? "light" : "dark";
+      try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+      } catch {
+        // Best-effort persistence — a restrictive webview shouldn't block
+        // the toggle itself from working for the rest of the session.
+      }
+      // The swap has to land synchronously inside the view-transition
+      // callback: the browser snapshots the page before and after it, then
+      // cross-fades the two (timing in app.css, THEME TRANSITION). That's
+      // why the data-theme attribute is set here directly instead of waiting
+      // for App's effect, and why React is flushed rather than batched —
+      // otherwise the "after" snapshot would still show the old theme. A
+      // whole-page snapshot also fades things CSS transitions can't reach,
+      // like the minimap's <canvas> and the inline colors on every block.
+      const apply = () => {
+        flushSync(() => set({ theme }));
+        document.documentElement.dataset.theme = theme;
+      };
+      if (typeof document.startViewTransition === "function") {
+        document.startViewTransition(apply);
+      } else {
+        apply();
+      }
+    },
 
     togglePalette: () =>
       set((state) => ({ paletteCollapsed: !state.paletteCollapsed })),
@@ -292,6 +365,28 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     closeMenu: () => set({ openMenu: null }),
 
     setDraggingKind: (kind) => set({ draggingKind: kind }),
+
+    // A half-finished wire and a pending placement would both claim the next
+    // canvas click, so entering place mode drops any armed port.
+    setPlacingKind: (kind) =>
+      set(kind ? { placingKind: kind, armedPort: null } : { placingKind: null }),
+
+    // Skips the update when nothing shown would change, so a mousemove
+    // doesn't re-render the status bar for nothing.
+    setPointer: (pointer) => {
+      const current = get().pointer;
+      const same =
+        pointer?.screen.x === current?.screen.x &&
+        pointer?.screen.y === current?.screen.y &&
+        pointer?.cell.x === current?.cell.x &&
+        pointer?.cell.y === current?.cell.y;
+      if (!same) {
+        set({ pointer });
+      }
+    },
+
+    togglePlacingKind: (kind) =>
+      get().setPlacingKind(get().placingKind === kind ? null : kind),
 
     setArmedPort: (port) => set({ armedPort: port }),
 
@@ -344,6 +439,17 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
           block.color = color;
         }
       }),
+
+    previewBlockColor: (id, color) =>
+      set((state) => ({
+        diagram: {
+          ...state.diagram,
+          blocks: state.diagram.blocks.map((block) =>
+            block.id === id ? { ...block, color } : block,
+          ),
+        },
+        dirty: true,
+      })),
 
     previewResizeBlock: (id, width, height) =>
       set((state) => ({
@@ -517,6 +623,26 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         const block = draft.blocks.find((b) => b.id === blockId);
         if (block && block.kind === "gate") {
           block.gateRotation = gateRotation;
+        }
+      }),
+
+    // The definition is a snapshot: later edits to the block's name or ports
+    // don't flow back into it. Where definitions ultimately live (and how
+    // "Link Module" picks an existing one) is still to be designed, so for
+    // now the definition rides along on the block itself.
+    createModuleFromBlock: (blockId) =>
+      commit((draft) => {
+        const block = draft.blocks.find((b) => b.id === blockId);
+        if (block && block.kind === "module") {
+          block.linkedModule = moduleDefinitionFromBlock(block);
+        }
+      }),
+
+    unlinkModule: (blockId) =>
+      commit((draft) => {
+        const block = draft.blocks.find((b) => b.id === blockId);
+        if (block) {
+          delete block.linkedModule;
         }
       }),
 

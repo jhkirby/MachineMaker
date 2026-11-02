@@ -10,6 +10,7 @@ import { IpcChannel } from "../shared/ipc-contract";
 import type {
   ExportImageRequest,
   SaveDiagramRequest,
+  SchematicFileFormat,
 } from "../shared/ipc-contract";
 import type { ProjectFileService } from "./project-file-service";
 import type { WindowManager } from "./window-manager";
@@ -44,6 +45,18 @@ export class IpcHandlers {
     );
 
     ipcMain.handle(
+      IpcChannel.ImportSchematic,
+      (_event: IpcMainInvokeEvent, format: SchematicFileFormat) =>
+        this.files.importSchematic(this.requireWindow(), format),
+    );
+
+    ipcMain.handle(
+      IpcChannel.AutosaveDiagram,
+      (_event: IpcMainInvokeEvent, request: SaveDiagramRequest) =>
+        this.files.autosaveDiagram(request),
+    );
+
+    ipcMain.handle(
       IpcChannel.ExportImage,
       (_event: IpcMainInvokeEvent, request: ExportImageRequest) =>
         this.files.exportImage(this.requireWindow(), request),
@@ -61,6 +74,11 @@ export class IpcHandlers {
       }
     });
     ipcMain.handle(IpcChannel.WindowClose, () => this.requireWindow().close());
+    // Full screen covers the OS taskbar too, which maximize never does.
+    ipcMain.handle(IpcChannel.WindowToggleFullScreen, () => {
+      const window = this.requireWindow();
+      window.setFullScreen(!window.isFullScreen());
+    });
     ipcMain.handle(IpcChannel.WindowIsMaximized, () =>
       this.requireWindow().isMaximized(),
     );

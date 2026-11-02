@@ -219,6 +219,48 @@ export interface RtlBlock {
    * model/component-library.ts). Omitted on every other kind.
    */
   gateRotation?: GateRotation;
+  /**
+   * The design this block stands for — only meaningful when `kind` is
+   * `"module"`. Omitted means the block is unlinked: a free-standing box on
+   * the diagram, not tied to any real module. Set from the inspector's Link
+   * section (InspectorPanel.tsx).
+   */
+  linkedModule?: ModuleDefinition;
+}
+
+/** One port of a {@link ModuleDefinition}: its interface, minus layout. */
+export interface ModulePortDefinition {
+  name: string;
+  direction: PortDirection;
+  /** Bus width in bits; omitted or 1 means a 1-bit wire, as on RtlPort. */
+  width?: number;
+}
+
+/**
+ * A module's interface — its name and ports, without any of a block's
+ * on-canvas layout (position, size, port sides/slots). What a module block
+ * links to; see {@link RtlBlock.linkedModule}.
+ */
+export interface ModuleDefinition {
+  name: string;
+  ports: ModulePortDefinition[];
+}
+
+/**
+ * Capture a block's current name and ports as a module interface.
+ *
+ * @param block - The block to take the interface from.
+ * @returns A standalone definition, sharing no objects with `block`.
+ */
+export function moduleDefinitionFromBlock(block: RtlBlock): ModuleDefinition {
+  return {
+    name: block.label,
+    ports: block.ports.map((port) => ({
+      name: port.name,
+      direction: port.direction,
+      ...(port.width && port.width > 1 ? { width: port.width } : {}),
+    })),
+  };
 }
 
 /** A wire between two ports. */

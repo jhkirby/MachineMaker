@@ -9,6 +9,7 @@ import type { DiagramCommands } from "../state/use-diagram-commands";
 import { useDiagramStore, type Theme } from "../state/diagram-store";
 import NameInput from "./NameInput";
 import ToolbarMenu from "./ToolbarMenu";
+import ViewControls from "./ViewControls";
 
 /**
  * Plain back (undo) or forward (redo) arrow. A real SVG rather than a text
@@ -81,8 +82,9 @@ function ThemeToggleIcon({ theme }: { theme: Theme }) {
 }
 
 /**
- * Top application bar: document title/dirty indicator on the left, the common
- * actions as buttons on the right.
+ * Top application bar: undo/redo, the File/Export menus, then the document
+ * title/dirty indicator on the left; the canvas view controls and theme
+ * toggle on the right.
  *
  * @param props - See {@link ToolbarProps}.
  * @returns The toolbar element.
@@ -90,7 +92,6 @@ function ThemeToggleIcon({ theme }: { theme: Theme }) {
 export default function Toolbar({ commands }: ToolbarProps) {
   const title = useDiagramStore((s) => s.diagram.title);
   const setTitle = useDiagramStore((s) => s.setTitle);
-  const dirty = useDiagramStore((s) => s.dirty);
   const canUndo = useDiagramStore((s) => s.past.length > 0);
   const canRedo = useDiagramStore((s) => s.future.length > 0);
   const theme = useDiagramStore((s) => s.theme);
@@ -123,24 +124,26 @@ export default function Toolbar({ commands }: ToolbarProps) {
           <HistoryArrowIcon direction="redo" />
         </button>
         <span className="toolbar__divider" />
-        <NameInput
-          value={title}
-          allowSpaces
-          ariaLabel="Diagram title"
-          className="toolbar__doc-input"
-          onCommit={setTitle}
-        />
-        {dirty ? <span className="toolbar__dirty">●</span> : null}
-        <span className="toolbar__divider" />
         <ToolbarMenu
           label="File"
           title="File menu (Ctrl+F)"
           open={openMenu === "file"}
           onOpenChange={(open) => (open ? toggleMenu("file") : closeMenu())}
           items={[
-            { label: "New", onClick: commands.newDiagram },
-            { label: "Open", onClick: () => void commands.open() },
-            { label: "Save", onClick: () => void commands.save() },
+            { label: "New Schematic", onClick: () => void commands.newDiagram() },
+            { label: "New State Machine", onClick: commands.newStateMachine },
+            { label: "Open Schematic", onClick: () => void commands.open() },
+            { label: "Open State Machine", onClick: commands.openStateMachine },
+          ]}
+        />
+        <ToolbarMenu
+          label="Import"
+          title="Import a schematic from code"
+          open={openMenu === "import"}
+          onOpenChange={(open) => (open ? toggleMenu("import") : closeMenu())}
+          items={[
+            { label: "JSON", onClick: () => void commands.importSchematic("json") },
+            { label: "YAML", onClick: () => void commands.importSchematic("yaml") },
           ]}
         />
         <ToolbarMenu
@@ -151,10 +154,22 @@ export default function Toolbar({ commands }: ToolbarProps) {
           items={[
             { label: "PNG", onClick: () => void commands.exportPng() },
             { label: "SVG", onClick: () => void commands.exportSvg() },
+            { label: "JSON", onClick: () => void commands.exportSchematic("json") },
+            { label: "YAML", onClick: () => void commands.exportSchematic("yaml") },
           ]}
+        />
+        <span className="toolbar__divider" />
+        <NameInput
+          value={title}
+          allowSpaces
+          ariaLabel="Diagram title"
+          className="toolbar__doc-input"
+          onCommit={setTitle}
         />
       </div>
       <div className="toolbar__actions">
+        <ViewControls commands={commands} />
+        <span className="toolbar__divider" />
         <button
           type="button"
           className="toolbar__icon-button"

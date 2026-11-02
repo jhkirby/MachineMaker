@@ -38,6 +38,11 @@ const DIRECTIONS: PortDirection[] = ["in", "out", "inout"];
 const GATE_TYPES: GateType[] = ["AND", "NAND", "OR", "NOR", "XOR", "XNOR"];
 const GATE_ROTATIONS: GateRotation[] = ["up", "down", "left", "right"];
 
+/** Largest width/height, in grid cells, the size fields accept. Also sets
+ *  how wide those fields are drawn: just enough for this many digits. */
+const MAX_BLOCK_CELLS = 99;
+const MAX_BLOCK_CELLS_DIGITS = String(MAX_BLOCK_CELLS).length;
+
 /**
  * Right sidebar. Shows properties for the current single selection (block or
  * wire), or a summary when several are selected at once. Slides fully out of
@@ -101,6 +106,58 @@ function DocumentInspector() {
 }
 
 /**
+ * Small up/down arrow pair for a number field — the app's own stand-in for
+ * Chromium's native spin buttons, which can't be themed and are hidden
+ * globally (app.css, RESET / BASE).
+ *
+ * @param props.label - What the field holds, for the buttons' labels.
+ * @param props.canIncrement - False at the field's maximum, disabling "up".
+ * @param props.canDecrement - False at the field's minimum, disabling "down".
+ * @param props.onStep - Called with +1 or -1.
+ * @returns The stacked button pair.
+ */
+function StepButtons({
+  label,
+  canIncrement,
+  canDecrement,
+  onStep,
+}: {
+  label: string;
+  canIncrement: boolean;
+  canDecrement: boolean;
+  onStep: (delta: 1 | -1) => void;
+}) {
+  return (
+    <span className="stepper__buttons">
+      <button
+        type="button"
+        className="stepper__button"
+        aria-label={`Increase ${label}`}
+        tabIndex={-1}
+        disabled={!canIncrement}
+        onClick={() => onStep(1)}
+      >
+        <svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true">
+          <path d="M1 5 5 1l4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="stepper__button"
+        aria-label={`Decrease ${label}`}
+        tabIndex={-1}
+        disabled={!canDecrement}
+        onClick={() => onStep(-1)}
+      >
+        <svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true">
+          <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+    </span>
+  );
+}
+
+/**
  * Editable properties for a single block, including its port table.
  *
  * @param props.block - The selected block.
@@ -111,6 +168,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   const theme = useDiagramStore((s) => s.theme);
   const updateBlockLabel = useDiagramStore((s) => s.updateBlockLabel);
   const updateBlockColor = useDiagramStore((s) => s.updateBlockColor);
+  const previewBlockColor = useDiagramStore((s) => s.previewBlockColor);
   const previewResizeBlock = useDiagramStore((s) => s.previewResizeBlock);
   const beginInteraction = useDiagramStore((s) => s.beginInteraction);
   const addPort = useDiagramStore((s) => s.addPort);
@@ -119,6 +177,10 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   const setModuleSequential = useDiagramStore((s) => s.setModuleSequential);
   const setGateType = useDiagramStore((s) => s.setGateType);
   const setGateRotation = useDiagramStore((s) => s.setGateRotation);
+  const createModuleFromBlock = useDiagramStore(
+    (s) => s.createModuleFromBlock,
+  );
+  const unlinkModule = useDiagramStore((s) => s.unlinkModule);
 
   const otherBlockNames = blocks
     .filter((b) => b.id !== block.id)
@@ -198,6 +260,8 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   const min = minBlockSize(block);
   const minWidthCells = Math.round(min.width / GRID_SIZE);
   const minHeightCells = Math.round(min.height / GRID_SIZE);
+  const widthCells = Math.round(block.width / GRID_SIZE);
+  const heightCells = Math.round(block.height / GRID_SIZE);
 
   // This block's actual current color (custom, or its kind's default) — set
   // as --block-stroke (and a translucent --block-stroke-glow, for a Dropdown
@@ -255,37 +319,75 @@ function BlockInspector({ block }: { block: RtlBlock }) {
       <div className="field field--row">
         <label className="field">
           <span>Width</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={minWidthCells}
-            value={Math.round(block.width / GRID_SIZE)}
-            aria-label="Block width in grid cells"
-            onFocus={beginInteraction}
-            onChange={(event) => {
-              const cells = Number(event.target.value);
-              if (Number.isFinite(cells)) {
-                previewResizeBlock(block.id, cells * GRID_SIZE, block.height);
-              }
-            }}
-          />
+          <span
+            className="stepper"
+            style={{ ["--stepper-digits" as string]: MAX_BLOCK_CELLS_DIGITS }}
+          >
+            <input
+              type="number"
+              inputMode="numeric"
+              min={minWidthCells}
+              max={MAX_BLOCK_CELLS}
+              value={widthCells}
+              aria-label="Block width in grid cells"
+              onFocus={beginInteraction}
+              onChange={(event) => {
+                const cells = Math.min(Number(event.target.value), MAX_BLOCK_CELLS);
+                if (Number.isFinite(cells)) {
+                  previewResizeBlock(block.id, cells * GRID_SIZE, block.height);
+                }
+              }}
+            />
+            <StepButtons
+              label="width"
+              canIncrement={widthCells < MAX_BLOCK_CELLS}
+              canDecrement={widthCells > minWidthCells}
+              onStep={(delta) => {
+                beginInteraction();
+                previewResizeBlock(
+                  block.id,
+                  (widthCells + delta) * GRID_SIZE,
+                  block.height,
+                );
+              }}
+            />
+          </span>
         </label>
         <label className="field">
           <span>Height</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={minHeightCells}
-            value={Math.round(block.height / GRID_SIZE)}
-            aria-label="Block height in grid cells"
-            onFocus={beginInteraction}
-            onChange={(event) => {
-              const cells = Number(event.target.value);
-              if (Number.isFinite(cells)) {
-                previewResizeBlock(block.id, block.width, cells * GRID_SIZE);
-              }
-            }}
-          />
+          <span
+            className="stepper"
+            style={{ ["--stepper-digits" as string]: MAX_BLOCK_CELLS_DIGITS }}
+          >
+            <input
+              type="number"
+              inputMode="numeric"
+              min={minHeightCells}
+              max={MAX_BLOCK_CELLS}
+              value={heightCells}
+              aria-label="Block height in grid cells"
+              onFocus={beginInteraction}
+              onChange={(event) => {
+                const cells = Math.min(Number(event.target.value), MAX_BLOCK_CELLS);
+                if (Number.isFinite(cells)) {
+                  previewResizeBlock(block.id, block.width, cells * GRID_SIZE);
+                }
+              }}
+            />
+            <StepButtons
+              label="height"
+              canIncrement={heightCells < MAX_BLOCK_CELLS}
+              canDecrement={heightCells > minHeightCells}
+              onStep={(delta) => {
+                beginInteraction();
+                previewResizeBlock(
+                  block.id,
+                  block.width,
+                  (heightCells + delta) * GRID_SIZE,
+                );
+              }}
+            />
+          </span>
         </label>
       </div>
 
@@ -499,11 +601,60 @@ function BlockInspector({ block }: { block: RtlBlock }) {
         </div>
       ) : null}
 
+      {block.kind === "module" ? (
+        <>
+          <h3 className="inspector__subheading">Link</h3>
+          {block.linkedModule ? (
+            <div className="field">
+              <p className="link-section__status">
+                Linked to{" "}
+                <span className="link-section__name">
+                  {block.linkedModule.name}
+                </span>
+              </p>
+              <div className="link-section__actions">
+                <button
+                  type="button"
+                  title="Detach this block from its module"
+                  onClick={() => unlinkModule(block.id)}
+                >
+                  Unlink
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="field">
+              <p className="inspector__muted">Module Unlinked</p>
+              <div className="link-section__actions">
+                {/* Placeholder: choosing an existing module isn't designed
+                    yet, so this does nothing for now. */}
+                <button
+                  type="button"
+                  title="Link this block to an existing module"
+                  onClick={() => undefined}
+                >
+                  Link Module
+                </button>
+                <button
+                  type="button"
+                  title="Create a new module from this block's name and ports"
+                  onClick={() => createModuleFromBlock(block.id)}
+                >
+                  Create Module
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : null}
+
       <h3 className="inspector__subheading">Color</h3>
       <ColorPicker
         value={block.color}
         defaultColor={paletteFor(block.kind, theme).stroke}
         onChange={(color) => updateBlockColor(block.id, color)}
+        onPreviewStart={beginInteraction}
+        onPreview={(color) => previewBlockColor(block.id, color)}
       />
     </div>
   );

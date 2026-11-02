@@ -7,6 +7,7 @@
 
 import { useEffect } from "react";
 import type { EditorCommand } from "../../../shared/ipc-contract";
+import { COMPONENT_LIBRARY } from "../model/component-library";
 import type { DiagramCommands } from "./use-diagram-commands";
 
 /** One key chord and the editor command it fires. */
@@ -20,6 +21,8 @@ interface Shortcut {
   mod: boolean;
   /** For `mod` chords only: requires Shift held (and its absence forbids it). */
   shift?: boolean;
+  /** For bare keys: fire even while a text field has focus. */
+  always?: boolean;
   command: EditorCommand;
 }
 
@@ -40,12 +43,25 @@ const SHORTCUTS: readonly Shortcut[] = [
   { key: "e", mod: true, command: "toggle-export-menu" },
   { key: "l", mod: true, command: "toggle-palette" },
   { key: "1", mod: true, command: "fit-view" },
+  { key: "/", mod: true, command: "focus-title" },
+  { key: "m", mod: true, command: "window-minimize" },
+  { key: "m", mod: true, shift: true, command: "window-toggle-maximize" },
+  { key: "w", mod: true, command: "window-close" },
+  { key: "f11", mod: false, always: true, command: "window-toggle-fullscreen" },
   { key: ["+", "="], mod: false, command: "zoom-in" },
   { key: ["-", "_"], mod: false, command: "zoom-out" },
   { key: "c", mod: false, command: "fit-view" },
   { key: "l", mod: false, command: "toggle-lock" },
   { key: "p", mod: false, command: "add-port" },
   { key: "escape", mod: false, command: "deselect" },
+  // One bare key per component enters place mode for it (component-library.ts).
+  ...COMPONENT_LIBRARY.map(
+    (template): Shortcut => ({
+      key: template.placeKey,
+      mod: false,
+      command: `place-${template.kind}`,
+    }),
+  ),
 ];
 
 /** Element tag names whose focus should swallow bare-key shortcuts. */
@@ -102,7 +118,7 @@ export function useKeyboardShortcuts(commands: DiagramCommands): void {
         if (shortcut.mod) {
           return Boolean(shortcut.shift) === event.shiftKey;
         }
-        return !isEditingTarget(event.target);
+        return shortcut.always || !isEditingTarget(event.target);
       });
       if (match) {
         event.preventDefault();

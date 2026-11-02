@@ -6,8 +6,11 @@
  * --------------------------------------------------------------------------- */
 
 import { join } from "node:path";
-import { BrowserWindow, shell } from "electron";
-import { IpcChannel } from "../shared/ipc-contract";
+import { BrowserWindow, screen, shell } from "electron";
+import { IpcChannel, TITLEBAR_HEIGHT } from "../shared/ipc-contract";
+
+/** How often the cursor is sampled for titlebar hover, in milliseconds. */
+const TITLEBAR_HOVER_POLL_MS = 80;
 
 /** App icon — see resources/icon.svg for the source and how it was rendered. */
 const ICON_PATH = join(__dirname, "../../resources/icon.png");
@@ -68,11 +71,50 @@ export class WindowManager {
       void window.loadFile(join(__dirname, "../renderer/index.html"));
     }
 
+    const stopHoverWatch = this.watchTitlebarHover(window);
+
     this.window = window;
     window.on("closed", () => {
+      stopHoverWatch();
       this.window = null;
     });
     return window;
+  }
+
+  /**
+   * Tell the renderer whenever the pointer enters or leaves the titlebar,
+   * which reveals/hides the window buttons (TitleBar.tsx).
+   *
+   * Polled from here rather than detected in the page: on Windows a
+   * `-webkit-app-region: drag` area is handed to the OS as caption, so the
+   * page never receives mouse events — not even :hover — while the pointer
+   * is over it. The cursor's screen position is the only reliable signal.
+   *
+   * @param window - The window whose titlebar to watch.
+   * @returns A function that stops watching.
+   */
+  private watchTitlebarHover(window: BrowserWindow): () => void {
+    let hovered = false;
+    const timer = setInterval(() => {
+      if (window.isDestroyed()) {
+        return;
+      }
+      const cursor = screen.getCursorScreenPoint();
+      const bounds = window.getContentBounds();
+      const zoom = window.webContents.getZoomFactor();
+      const next =
+        window.isVisible() &&
+        !window.isMinimized() &&
+        cursor.x >= bounds.x &&
+        cursor.x < bounds.x + bounds.width &&
+        cursor.y >= bounds.y &&
+        cursor.y < bounds.y + TITLEBAR_HEIGHT * zoom;
+      if (next !== hovered) {
+        hovered = next;
+        window.webContents.send(IpcChannel.WindowTitlebarHoverChanged, next);
+      }
+    }, TITLEBAR_HOVER_POLL_MS);
+    return () => clearInterval(timer);
   }
 
   /**

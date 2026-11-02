@@ -160,7 +160,7 @@ export function isValidHexColor(value: string): boolean {
  * @param hex - A valid hex color (see {@link isValidHexColor}).
  * @returns The red, green, and blue channels.
  */
-function hexToRgb(hex: string): [r: number, g: number, b: number] {
+export function hexToRgb(hex: string): [r: number, g: number, b: number] {
   const value = parseInt(hex.slice(1), 16);
   return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }

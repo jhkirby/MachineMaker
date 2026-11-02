@@ -22,7 +22,11 @@ import {
 } from "../../model/flow-adapters";
 import { portPitchCells } from "../../model/port-layout";
 import { useDiagramStore } from "../../state/diagram-store";
-import GateSymbol from "./GateSymbol";
+import GateSymbol, {
+  canonicalInputAlong,
+  gateInputEdgeOffset,
+  placementFor,
+} from "./GateSymbol";
 
 /** Gap, in px, between the clock triangle and its label. */
 const CLOCK_LABEL_GAP = 6;
@@ -121,8 +125,39 @@ function portLayout(
   label: React.CSSProperties;
 } {
   const horizontal = port.side === "left" || port.side === "right";
-  const along = `${port.slot * portPitchCells(block, port.side) * GRID_SIZE}px`;
+  const alongPx = port.slot * portPitchCells(block, port.side) * GRID_SIZE;
+  const along = `${alongPx}px`;
   const inset = isClock ? CLOCK_TRIANGLE_DEPTH + CLOCK_LABEL_GAP : horizontal ? 10 : 8;
+  // A gate's input face is a curve (every type but AND/NAND), not a flat
+  // edge — GateSymbol still draws that curve to fill exactly the block's own
+  // box (see MARGIN there), so it only meets the flat edge every port is
+  // otherwise centered on at the very top/bottom corners. This is how far to
+  // additionally push a gate's own input port in (or, negative, out) from
+  // that flat edge so it lands on the curve's actual boundary at its own
+  // height instead — 0 for every other kind, and for a gate's own output
+  // (always a single point exactly at the flat edge already). See
+  // GateSymbol's gateInputEdgeOffset for the geometry this mirrors.
+  const gateEdgeOffset =
+    block.kind === "gate" && port.direction === "in"
+      ? (() => {
+          const { localW, localH } = placementFor(
+            block.gateRotation ?? "right",
+            block.width,
+            block.height,
+          );
+          const canonicalAlong = canonicalInputAlong(
+            block.gateRotation ?? "right",
+            localH,
+            alongPx,
+          );
+          return gateInputEdgeOffset(
+            block.gateType ?? "AND",
+            localW,
+            localH,
+            canonicalAlong,
+          );
+        })()
+      : 0;
   // translateZ(0) alongside the real positioning translate promotes this
   // label onto its own GPU layer permanently, from its very first render —
   // deliberately not toggled by anything hover-driven, unlike the filter()
@@ -140,20 +175,20 @@ function portLayout(
   // recomposite instead, regardless of what changes around it.
   if (horizontal) {
     return {
-      handle: { top: along },
+      handle: { top: along, [port.side]: gateEdgeOffset } as React.CSSProperties,
       label: {
         top: along,
-        [port.side]: inset,
+        [port.side]: inset + gateEdgeOffset,
         transform: "translateY(-50%) translateZ(0)",
         textAlign: port.side === "left" ? "left" : "right",
       } as React.CSSProperties,
     };
   }
   return {
-    handle: { left: along },
+    handle: { left: along, [port.side]: gateEdgeOffset } as React.CSSProperties,
     label: {
       left: along,
-      [port.side]: inset,
+      [port.side]: inset + gateEdgeOffset,
       transform: "translateX(-50%) translateZ(0)",
       textAlign: "center",
     } as React.CSSProperties,
