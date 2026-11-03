@@ -22,6 +22,7 @@ import { useAutosave } from "./state/use-autosave";
 import { useDiagramCommands } from "./state/use-diagram-commands";
 import { useKeyboardShortcuts } from "./state/use-keyboard-shortcuts";
 import { syncColorHistory } from "./state/color-history-store";
+import { startModuleLinkSync } from "./state/module-links";
 import {
   activateTabByPath,
   attachTab,
@@ -71,6 +72,9 @@ export default function App() {
 
   // The color swatches follow the project's shared recent-colors history.
   useEffect(() => syncColorHistory(), []);
+
+  // Linked modules follow the schematics they link to (state/module-links).
+  useEffect(() => startModuleLinkSync(), []);
 
   // Keep the main process told what this window has open, and answer its
   // two requests: take a tab dragged in from another window, and bring an

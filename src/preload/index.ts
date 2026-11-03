@@ -18,6 +18,7 @@ import type {
   OpenEditorRequest,
   RecentColorsEvent,
   RtlBridgeApi,
+  SchematicSavedEvent,
   SaveDiagramRequest,
   SchematicFileFormat,
 } from "../shared/ipc-contract";
@@ -59,6 +60,8 @@ const api: RtlBridgeApi = {
     ipcRenderer.invoke(IpcChannel.ListRecentColors, projectPath),
   useRecentColor: (projectPath: string | null, color: string) =>
     ipcRenderer.invoke(IpcChannel.UseRecentColor, projectPath, color),
+  onSchematicSaved: (callback: (event: SchematicSavedEvent) => void) =>
+    subscribe(IpcChannel.SchematicSaved, callback),
   onRecentColorsChange: (callback: (event: RecentColorsEvent) => void) =>
     subscribe(IpcChannel.RecentColorsChanged, callback),
   getLaunchContext: () => ipcRenderer.invoke(IpcChannel.GetLaunchContext),

@@ -33,9 +33,11 @@ import {
   useColorHistoryStore,
 } from "../state/color-history-store";
 import { useDiagramStore } from "../state/diagram-store";
+import { isLinkedModule, linkablePorts } from "../../../shared/module-interface";
 import ColorPicker from "./ColorPicker";
 import CommitInput from "./CommitInput";
 import Dropdown from "./Dropdown";
+import ModuleLinkSection from "./ModuleLinkSection";
 import NameInput from "./NameInput";
 import NumericField from "./NumericField";
 import StepButtons from "./StepButtons";
@@ -141,10 +143,6 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   const setModuleSequential = useDiagramStore((s) => s.setModuleSequential);
   const setGateType = useDiagramStore((s) => s.setGateType);
   const setGateRotation = useDiagramStore((s) => s.setGateRotation);
-  const createModuleFromBlock = useDiagramStore(
-    (s) => s.createModuleFromBlock,
-  );
-  const unlinkModule = useDiagramStore((s) => s.unlinkModule);
   const recentColors = useColorHistoryStore((s) => s.recent);
   const recordColor = useColorHistoryStore((s) => s.use);
 
@@ -181,11 +179,22 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   // back on the next render.
   // A codec's or mux's directions are likewise fixed — by its Type and
   // layout rather than per port (see structured-ports.ts).
+  // A linked module's ports take their direction and width from the
+  // linked schematic's I/O ports (only name and side are this schematic's
+  // to set) — change them there, and every module linked to it follows.
+  const linked = isLinkedModule(block);
+  const linkedPortIds = new Set(
+    linked ? linkablePorts(block).map((port) => port.id) : [],
+  );
+  const fromLinkedSchematic = (port: RtlPort): boolean =>
+    linkedPortIds.has(port.id);
+
   const hasFixedDirection = (port: RtlPort): boolean =>
     isClockOrReset(port) ||
     (block.kind === "register" && (port.name === "d" || port.name === "q")) ||
     block.kind === "gate" ||
-    isStructuredKind(block.kind);
+    isStructuredKind(block.kind) ||
+    fromLinkedSchematic(port);
 
   // Kinds whose every port is a plain 1-bit wire, so the Ports table drops
   // its Width column rather than showing "1" on every row.
@@ -197,7 +206,8 @@ function BlockInspector({ block }: { block: RtlBlock }) {
 
   // clk/reset are always exactly 1 bit — a bus doesn't mean anything for a
   // clock edge or a reset level.
-  const hasFixedWidth = isClockOrReset;
+  const hasFixedWidth = (port: RtlPort): boolean =>
+    isClockOrReset(port) || fromLinkedSchematic(port);
 
   // Read fresh on every render rather than cached, same as everything else
   // here — used both by canRemovePort below and by the "+ Port" cap further
@@ -215,7 +225,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   // (rather than rendering disabled) — see the empty <span> fallback below,
   // which fills the same grid cell so nothing else in the row shifts.
   const canRemovePort = (port: RtlPort): boolean =>
-    (block.kind === "module" && !hasFixedDirection(port)) ||
+    (block.kind === "module" && !linked && !hasFixedDirection(port)) ||
     (block.kind === "gate" &&
       port.direction === "in" &&
       gateInputCount > GATE_MIN_INPUTS);
@@ -269,7 +279,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
       ? gateInputCount >= GATE_MAX_INPUTS
       : countedPorts(block.ports) >= MAX_PORTS;
   const portSummary = portDirectionSummary(block.ports);
-  const canAddPort = block.kind === "module" || block.kind === "gate";
+  const canAddPort = (block.kind === "module" && !linked) || block.kind === "gate";
 
   return (
     <div
@@ -509,7 +519,9 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                   title={
                     isClockOrReset(port)
                       ? "A clock/reset is always an input"
-                      : block.kind === "gate"
+                      : fromLinkedSchematic(port)
+                        ? "Set by the linked schematic's I/O port"
+                        : block.kind === "gate"
                         ? "A gate's output is always \"out\", every other port always \"in\""
                         : block.kind === "codec"
                           ? "Set by the codec's Type, above"
@@ -544,9 +556,13 @@ function BlockInspector({ block }: { block: RtlBlock }) {
               ) : hasFixedWidth(port) ? (
                 <span
                   className="port-row__fixed-value"
-                  title="A clock/reset is always 1 bit"
+                  title={
+                    fromLinkedSchematic(port)
+                      ? "Set by the linked schematic's I/O port"
+                      : "A clock/reset is always 1 bit"
+                  }
                 >
-                  1
+                  {port.width ?? 1}
                 </span>
               ) : (
                 <NumericField
@@ -612,52 +628,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
         </div>
       ) : null}
 
-      {block.kind === "module" ? (
-        <>
-          <h3 className="inspector__subheading">Link</h3>
-          {block.linkedModule ? (
-            <div className="field">
-              <p className="link-section__status">
-                Linked to{" "}
-                <span className="link-section__name">
-                  {block.linkedModule.name}
-                </span>
-              </p>
-              <div className="link-section__actions">
-                <button
-                  type="button"
-                  title="Detach this block from its module"
-                  onClick={() => unlinkModule(block.id)}
-                >
-                  Unlink
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="field">
-              <p className="inspector__muted">Module Unlinked</p>
-              <div className="link-section__actions">
-                {/* Placeholder: choosing an existing module isn't designed
-                    yet, so this does nothing for now. */}
-                <button
-                  type="button"
-                  title="Link this block to an existing module"
-                  onClick={() => undefined}
-                >
-                  Link Module
-                </button>
-                <button
-                  type="button"
-                  title="Create a new module from this block's name and ports"
-                  onClick={() => createModuleFromBlock(block.id)}
-                >
-                  Create Module
-                </button>
-              </div>
-            </div>
-          )}
-        </>
-      ) : null}
+      {block.kind === "module" ? <ModuleLinkSection block={block} /> : null}
 
       <h3 className="inspector__subheading">Color</h3>
       <ColorPicker

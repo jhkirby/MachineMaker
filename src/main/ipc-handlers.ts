@@ -18,14 +18,17 @@ import type {
   DetachTabRequest,
   DetachTabResult,
   ExportImageRequest,
+  FileDialogResult,
   OpenDocumentsReport,
   TabAttachEvent,
   OpenDiagramRequest,
   OpenEditorRequest,
   RecentColorsEvent,
   SaveDiagramRequest,
+  SchematicSavedEvent,
   SchematicFileFormat,
 } from "../shared/ipc-contract";
+import type { RtlDiagram } from "../shared/diagram-model";
 import type { ColorHistoryService } from "./color-history-service";
 import type { ProjectFileService } from "./project-file-service";
 import type { OpenDocumentRegistry } from "./open-document-registry";
@@ -123,17 +126,21 @@ export class IpcHandlers {
 
     this.handle(
       IpcChannel.CreateSchematic,
-      (_event, request: CreateSchematicRequest) =>
-        this.files.createSchematic({
-          ...request,
-          name: requireString(request?.name, "name"),
-        }),
+      async (_event, request: CreateSchematicRequest) =>
+        this.announceSave(
+          await this.files.createSchematic({
+            ...request,
+            name: requireString(request?.name, "name"),
+          }),
+        ),
     );
 
     this.handle(
       IpcChannel.SaveDiagram,
-      (event: IpcMainInvokeEvent, request: SaveDiagramRequest) =>
-        this.files.saveDiagram(this.windows.windowFor(event.sender), request),
+      async (event: IpcMainInvokeEvent, request: SaveDiagramRequest) =>
+        this.announceSave(
+          await this.files.saveDiagram(this.windows.windowFor(event.sender), request),
+        ),
     );
 
     this.handle(
@@ -144,8 +151,8 @@ export class IpcHandlers {
 
     this.handle(
       IpcChannel.AutosaveDiagram,
-      (_event: IpcMainInvokeEvent, request: SaveDiagramRequest) =>
-        this.files.autosaveDiagram(request),
+      async (_event: IpcMainInvokeEvent, request: SaveDiagramRequest) =>
+        this.announceSave(await this.files.autosaveDiagram(request)),
     );
 
     this.handle(
@@ -322,6 +329,25 @@ export class IpcHandlers {
     this.handle(IpcChannel.WindowIsMaximized, (event) =>
       this.windows.windowFor(event.sender).isMaximized(),
     );
+  }
+
+  /**
+   * Tell every window a schematic was just written, so any module linked to
+   * it (in any open document) can bring its ports back in line.
+   *
+   * @param result - The save's result; passed back unchanged.
+   * @returns `result`.
+   */
+  private announceSave(
+    result: FileDialogResult<RtlDiagram>,
+  ): FileDialogResult<RtlDiagram> {
+    if (result.ok && result.path && result.data) {
+      const event: SchematicSavedEvent = { path: result.path, diagram: result.data };
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(IpcChannel.SchematicSaved, event);
+      }
+    }
+    return result;
   }
 
   /**

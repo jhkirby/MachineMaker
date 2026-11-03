@@ -70,6 +70,7 @@ components:                       # keyed by name; names must be unique
   adder:
     type: module
     sequential: false             # true adds clk and reset ports
+    link: schematics/Adder.rtlproj  # optional: the schematic it stands for
     inputs: ["a[32]", "b[32]"]    # "name", "name[width]", "name[width] @side"
     outputs: ["sum[32]"]
     color: "#22c55e"
@@ -365,7 +366,7 @@ const COMMON_KEYS = ["type", "at", "size", "color"];
 /** Every kind whose ports can be tied off also accepts a `tied` list. */
 const TIEABLE_KEYS = [...COMMON_KEYS, "tied"];
 const KEYS_BY_TYPE: Record<ComponentType, readonly string[]> = {
-  module: [...TIEABLE_KEYS, "sequential", "inputs", "outputs", "inouts"],
+  module: [...TIEABLE_KEYS, "sequential", "inputs", "outputs", "inouts", "link"],
   register: [...TIEABLE_KEYS, "width"],
   gate: [...TIEABLE_KEYS, "gate", "inputs", "rotation"],
   decoder: [...TIEABLE_KEYS, "bits", "inputs", "outputs"],
@@ -443,6 +444,18 @@ function buildComponent(name: string, spec: unknown, path: string): BuiltCompone
           seen.add(port.name);
           addPort(block, port, direction);
         });
+      }
+      if (spec.link !== undefined) {
+        if (typeof spec.link !== "string" || spec.link.trim() === "") {
+          throw new SchematicError(
+            `${path}.link`,
+            'expected a project-relative schematic path, like "schematics/ALU.rtlproj"',
+          );
+        }
+        // Only the path is known here; the ports are matched to the linked
+        // schematic by name once the document is open in its project (see
+        // state/module-links.ts).
+        block.linkedModule = { name: "", path: spec.link.trim(), ports: [] };
       }
       break;
     }
@@ -861,6 +874,9 @@ function blockToSpec(block: RtlBlock): Json {
         if (ports.length > 0) {
           spec[key] = ports.map(portToSpec);
         }
+      }
+      if (block.linkedModule?.path) {
+        spec.link = block.linkedModule.path;
       }
       break;
     }

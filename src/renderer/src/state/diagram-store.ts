@@ -15,7 +15,6 @@ import {
   formatBusWidth,
   isClockPort,
   isResetPort,
-  moduleDefinitionFromBlock,
   GATE_MAX_INPUTS,
   GATE_MIN_INPUTS,
   MAX_BUS_WIDTH,
@@ -27,13 +26,16 @@ import {
   type CodecType,
   type GateRotation,
   type GateType,
+  type ModuleDefinition,
   type PortDirection,
   type PortSide,
   type RtlDiagram,
   type RtlPort,
   type RtlWire,
 } from "../../../shared/diagram-model";
+import { isLinkedModule, linkablePorts } from "../../../shared/module-interface";
 import { createBlock, createPort } from "../model/component-library";
+import { reconcileModulePorts } from "../model/module-link-ports";
 import { directionsCompatible } from "../model/flow-adapters";
 import { FINE_GRID_SIZE, GRID_SIZE, snapToGrid } from "../model/grid";
 import {
@@ -262,11 +264,19 @@ export interface DiagramStore {
    */
   setMuxDataWidth(blockId: string, dataWidth: number): void;
   /**
-   * Make a new module definition from a module block's current name and
-   * ports, and link the block to it.
+   * Link a module block to a schematic's interface, or bring an already
+   * linked one back in line after that schematic changed: ports are added,
+   * removed and reshaped to match, keeping wires wherever a port still
+   * fits (see reconcileModulePorts in model/module-link-ports.ts).
    */
-  createModuleFromBlock(blockId: string): void;
-  /** Detach a module block from whatever module it was linked to. */
+  applyModuleInterface(blockId: string, definition: ModuleDefinition): void;
+  /**
+   * Re-sync every module linked to `path` (project-relative) at once, in
+   * one undo step — what a save of that schematic triggers. A no-op when
+   * nothing is linked to it.
+   */
+  syncLinkedModules(path: string, definition: ModuleDefinition): void;
+  /** Detach a module block from the schematic it was linked to. */
   unlinkModule(blockId: string): void;
 
   // ── wires ──
@@ -585,9 +595,9 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
       commit((draft) => {
         const block = draft.blocks.find((b) => b.id === blockId);
         // A codec's or mux's ports come only from its settings (see
-        // structured-ports.ts) — one added by hand would just be conformed
-        // straight back out again.
-        if (!block || isStructuredKind(block.kind)) {
+        // structured-ports.ts), and a linked module's from its schematic's
+        // I/O ports — one added by hand would be undone on the next sync.
+        if (!block || isStructuredKind(block.kind) || isLinkedModule(block)) {
           return;
         }
         // A gate's own cap is its input count (GATE_MAX_INPUTS) — much
@@ -622,7 +632,21 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
           return;
         }
         const movedSide = patch.side !== undefined && patch.side !== port.side;
-        Object.assign(port, patch);
+        // A linked module's port takes its direction and width from the
+        // linked schematic; only its name and side are this schematic's
+        // to choose.
+        const ownShape =
+          !isLinkedModule(block) || !linkablePorts(block).includes(port);
+        Object.assign(
+          port,
+          ownShape
+            ? patch
+            : Object.fromEntries(
+                Object.entries(patch).filter(
+                  ([key]) => key !== "direction" && key !== "width",
+                ),
+              ),
+        );
         if (movedSide) {
           // Its old slot is meaningless on the new side; take a free one there.
           port.slot = nextFreeSlot(block, port.side, port.id);
@@ -646,7 +670,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         // from appearing in the first place; this is the same backstop
         // normalizeFixedPorts is for direction/width, just for a mutation
         // that can't be un-done after the fact by re-normalizing.
-        if (isStructuredKind(block.kind)) {
+        if (
+          isStructuredKind(block.kind) ||
+          (isLinkedModule(block) && linkablePorts(block).includes(port))
+        ) {
           return;
         }
         if (
@@ -830,23 +857,38 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
       });
     },
 
-    // The definition is a snapshot: later edits to the block's name or ports
-    // don't flow back into it. Where definitions ultimately live (and how
-    // "Link Module" picks an existing one) is still to be designed, so for
-    // now the definition rides along on the block itself.
-    createModuleFromBlock: (blockId) =>
+    applyModuleInterface: (blockId, definition) =>
       commit((draft) => {
         const block = draft.blocks.find((b) => b.id === blockId);
         if (block && block.kind === "module") {
-          block.linkedModule = moduleDefinitionFromBlock(block);
+          reconcileModulePorts(block, definition);
         }
       }),
 
+    syncLinkedModules: (path, definition) => {
+      const linked = get().diagram.blocks.some(
+        (block) => isLinkedModule(block) && block.linkedModule?.path === path,
+      );
+      if (!linked) {
+        return;
+      }
+      commit((draft) => {
+        for (const block of draft.blocks) {
+          if (isLinkedModule(block) && block.linkedModule?.path === path) {
+            reconcileModulePorts(block, definition);
+          }
+        }
+      });
+    },
+
+    // The ports stay exactly as they are — they're simply this schematic's
+    // own again, free to edit, with no schematic behind them.
     unlinkModule: (blockId) =>
       commit((draft) => {
         const block = draft.blocks.find((b) => b.id === blockId);
         if (block) {
           delete block.linkedModule;
+          block.ports.forEach((port) => delete port.sourceId);
         }
       }),
 

@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-04
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 @import "./tokens.css";
@@ -379,6 +379,8 @@ input.is-invalid:focus {
 .status-bar__group {
   display: flex;
   align-items: center;
+  min-width: 0;
+  overflow: hidden;
   gap: var(--space-3);
   padding: 0 var(--space-3);
 }
@@ -393,6 +395,38 @@ input.is-invalid:focus {
   display: inline-flex;
   align-items: baseline;
   gap: var(--space-1);
+}
+
+/* The pass/fail readouts (StatusBar.tsx) — Valid Schematic and Simulation
+   Ready — pushed together to the far right of the bar. On a narrow window
+   the stat groups give way (they clip), never these. */
+.status-bar__indicators {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* One readout: green with a check when it passes, red with an X when not. */
+.status-bar__validity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  font-weight: 600;
+  cursor: default;
+}
+
+.status-bar__validity + .status-bar__validity {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.status-bar__validity.is-valid {
+  color: var(--success);
+}
+
+.status-bar__validity.is-invalid {
+  color: var(--danger);
 }
 
 /* Values in the mono font with fixed-width digits, so a count ticking up
@@ -1607,6 +1641,11 @@ input.is-invalid:focus {
   flex: 1;
 }
 
+/* A linked module whose schematic file is gone (deleted, say). */
+.link-section__missing {
+  color: var(--danger);
+}
+
 /* ── PORT TABLE ───────────────────────────────────────────────────────────── */
 
 /* padding-right matches .port-list's own combined inset below (its
@@ -2226,6 +2265,23 @@ input.is-invalid:focus {
   justify-content: center;
 }
 
+/* Two choices side by side — a way back and the action — e.g. the Link
+   Module popup's "Ports don't match" warning. */
+.modal__actions--spread {
+  gap: var(--space-3);
+}
+
+/* The way back: plain, so the action beside it is the one that stands out. */
+.modal__button.modal__button--quiet {
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+}
+
+.modal__button.modal__button--quiet:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
 /* The popup's Confirm button wears the same red-outline look as the
    inspector's Delete button (.inspector__delete) — one destructive style
    app-wide. */
@@ -2292,6 +2348,18 @@ input.is-invalid:focus {
 }
 
 /* ── LIST PICKER POPUP ────────────────────────────────────────────────────── */
+
+/* A detail value marked as a pass or a fail (PickerItem.details' tone) —
+   e.g. the Link Module popup's "Ports Match" check or X. */
+.picker__detail-value.is-good {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.picker__detail-value.is-bad {
+  color: var(--danger);
+  font-weight: 600;
+}
 
 /* ListPickerDialog.tsx: Open Project / Open Schematic. A search box over a
    scrolling list; the highlighted row (hover or ↑/↓) is what Enter opens. */

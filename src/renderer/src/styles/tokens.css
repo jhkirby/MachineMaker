@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 :root {
@@ -25,6 +25,7 @@
   --accent: #4c9ffe;
   --accent-hover: #6fb2ff;
   --danger: #e0655f;
+  --success: #4ade80;
 
   /* How long a block's selection ring takes to grow in/shrink out — shared
      by the rectangular ring (.rtl-block::after) and a gate's own
@@ -145,6 +146,7 @@
   --accent: #2f6fe0;
   --accent-hover: #1f5bc4;
   --danger: #c8433c;
+  --success: #15803d;
 
   /* Matching rgb()s to this theme's own --accent/--danger above — see the
      dark-mode definition's comment for why these can't just be computed

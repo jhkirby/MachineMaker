@@ -34,6 +34,8 @@ export const IpcChannel = {
   DeleteProjectFile: "project:delete-file",
   ListRecentColors: "colors:list-recent",
   UseRecentColor: "colors:use",
+  /** Main → every window push: a schematic file was just written. */
+  SchematicSaved: "diagram:saved",
   /** Main → every window push: a project's recent colors changed. */
   RecentColorsChanged: "colors:recent-changed",
   GetLaunchContext: "app:get-launch-context",
@@ -164,6 +166,14 @@ export interface DeleteProjectFileRequest {
   filePath: string;
 }
 
+/** Payload of {@link IpcChannel.SchematicSaved}. */
+export interface SchematicSavedEvent {
+  /** Absolute path of the file written. */
+  path: string;
+  /** What was written to it. */
+  diagram: RtlDiagram;
+}
+
 /** Payload of {@link IpcChannel.RecentColorsChanged}. */
 export interface RecentColorsEvent {
   /** Whose history changed; null for the loose (no-project) one. */
@@ -250,6 +260,11 @@ export interface RtlBridgeApi {
    * history through {@link RtlBridgeApi.onRecentColorsChange}.
    */
   useRecentColor(projectPath: string | null, color: string): Promise<string[]>;
+  /**
+   * Subscribe to every schematic save, from any window — how a module
+   * linked to a schematic hears that the schematic changed.
+   */
+  onSchematicSaved(callback: (event: SchematicSavedEvent) => void): () => void;
   /** Subscribe to any window's change to a recent-colors history. */
   onRecentColorsChange(callback: (event: RecentColorsEvent) => void): () => void;
 

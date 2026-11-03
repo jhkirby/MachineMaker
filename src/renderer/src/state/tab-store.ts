@@ -482,3 +482,34 @@ export function reportOpenDocumentsOnChange(): () => void {
     offDiagram();
   };
 }
+
+/**
+ * Open a schematic by path: switch to it if this window has it, bring the
+ * other window forward if one does, otherwise load it into a new tab here.
+ *
+ * @param path - The schematic file.
+ */
+export async function openSchematicPath(path: string): Promise<void> {
+  if (openHere(path)) {
+    await activateTabByPath(path);
+    return;
+  }
+  if (await window.rtl.focusOpenDocument(path)) {
+    return;
+  }
+  await openInNewTab(await window.rtl.loadDiagram(path), path);
+}
+
+/**
+ * Whether this window already has `path` open in some tab.
+ *
+ * @param path - A schematic file.
+ * @returns True if so.
+ */
+export function openHere(path: string): boolean {
+  const { tabs, activeId } = useTabStore.getState();
+  const livePath = useDiagramStore.getState().filePath;
+  return tabs.some((tab) =>
+    tab.id === activeId ? livePath === path : tab.snapshot?.filePath === path,
+  );
+}

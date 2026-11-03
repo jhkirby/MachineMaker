@@ -17,8 +17,11 @@ export interface PickerItem {
   name: string;
   /** Secondary text under the name: where it lives. */
   path: string;
-  /** Label/value facts shown on the right, e.g. dates. */
-  details: Array<{ label: string; value: string }>;
+  /**
+   * Label/value facts shown on the right, e.g. dates. A `tone` colors the
+   * value as a pass ("good", green) or a fail ("bad", red).
+   */
+  details: Array<{ label: string; value: string; tone?: "good" | "bad" }>;
   /** Small tag after the name, e.g. "Open". */
   badge?: string;
 }
@@ -33,10 +36,13 @@ interface ListPickerDialogProps {
   emptyText: string;
   searchPlaceholder: string;
   /** Tooltip for the corner folder button. */
-  browseLabel: string;
+  browseLabel?: string;
   onPick: (item: PickerItem) => void;
-  /** Open the OS file dialog instead. */
-  onBrowse: () => void;
+  /**
+   * Open the OS file dialog instead. Omit to leave the folder button out —
+   * for a popup that may only pick from its own list.
+   */
+  onBrowse?: () => void;
   onClose: () => void;
 }
 
@@ -133,7 +139,7 @@ export default function ListPickerDialog({
       ?.scrollIntoView({ block: "nearest" });
   }, [highlight, visible]);
 
-  const browseButton = (
+  const browseButton = onBrowse ? (
     <button
       type="button"
       className="modal__icon-button"
@@ -152,7 +158,7 @@ export default function ListPickerDialog({
         />
       </svg>
     </button>
-  );
+  ) : null;
 
   return (
     <Modal title={title} onClose={onClose} actions={browseButton} wide>
@@ -199,7 +205,13 @@ export default function ListPickerDialog({
                 {item.details.map((detail) => (
                   <span key={detail.label} className="picker__detail">
                     <span className="picker__detail-label">{detail.label}</span>{" "}
-                    {detail.value}
+                    {detail.tone ? (
+                      <span className={`picker__detail-value is-${detail.tone}`}>
+                        {detail.value}
+                      </span>
+                    ) : (
+                      detail.value
+                    )}
                   </span>
                 ))}
               </span>
