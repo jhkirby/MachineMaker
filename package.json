@@ -1,6 +1,6 @@
 {
   "name": "machinemaker",
-  "version": "0.1.0",
+  "version": "1.0.0-alpha",
   "description": "MachineMaker \u2014 desktop editor for hand-authoring RTL block diagrams.",
   "author": "Joshua H. Kirby",
   "license": "MIT",
