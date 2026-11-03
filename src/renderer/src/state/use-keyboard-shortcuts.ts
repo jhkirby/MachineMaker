@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import { useEffect } from "react";
@@ -56,6 +56,7 @@ const SHORTCUTS: readonly Shortcut[] = [
   { key: "w", mod: true, command: "close-tab" },
   { key: "w", mod: true, shift: true, command: "close-all-tabs" },
   { key: "h", mod: true, command: "go-home" },
+  { key: "b", mod: true, command: "toggle-mode" },
   { key: "f11", mod: false, always: true, command: "window-toggle-fullscreen" },
   { key: ["+", "="], mod: false, command: "zoom-in" },
   { key: ["-", "_"], mod: false, command: "zoom-out" },

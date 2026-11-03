@@ -25,7 +25,34 @@ import {
   type RtlBlockNode as RtlBlockNodeType,
 } from "../../model/flow-adapters";
 import { portPitchCells } from "../../model/port-layout";
+import { describeSignalValue, formatSignalValue } from "../../model/signal-values";
 import { useDiagramStore } from "../../state/diagram-store";
+import { VALUE_TAG_GAP } from "../../model/value-tags";
+import { useSimulationStore } from "../../state/simulation-store";
+
+/**
+ * Where a port's simulated-value tag sits: just outside the block, beside
+ * the port's bubble — the opposite side from its name label, which is
+ * inside — so the two never overlap.
+ *
+ * @param block - The owning block.
+ * @param port - The port.
+ * @returns Absolute-position styles relative to the block.
+ */
+function valueTagLayout(block: RtlBlock, port: RtlPort): React.CSSProperties {
+  const along = `${port.slot * portPitchCells(block, port.side) * GRID_SIZE}px`;
+  const outside = `calc(100% + ${VALUE_TAG_GAP}px)`;
+  switch (port.side) {
+    case "left":
+      return { top: along, right: outside, transform: "translateY(-50%)" };
+    case "right":
+      return { top: along, left: outside, transform: "translateY(-50%)" };
+    case "top":
+      return { left: along, bottom: outside, transform: "translateX(-50%)" };
+    case "bottom":
+      return { left: along, top: outside, transform: "translateX(-50%)" };
+  }
+}
 import GateSymbol, {
   canonicalInputAlong,
   gateInputEdgeOffset,
@@ -245,6 +272,9 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
 
   const diagram = useDiagramStore((s) => s.diagram);
   const armedPort = useDiagramStore((s) => s.armedPort);
+  const simulating = useDiagramStore((s) => s.mode === "simulate");
+  const simulatedValues = useSimulationStore((s) => s.ports);
+  const hiddenTags = useSimulationStore((s) => s.hiddenTags);
   const setArmedPort = useDiagramStore((s) => s.setArmedPort);
   const connect = useDiagramStore((s) => s.connect);
 
@@ -424,6 +454,23 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
                 <em> {formatBusWidth(port.width)}</em>
               ) : null}
             </span>
+            {simulating &&
+            !port.tiedOff &&
+            !hiddenTags.has(`${block.id}/${port.id}`) ? (
+              // The value on this port's wire, beside its bubble.
+              (() => {
+                const value = simulatedValues.get(`${block.id}/${port.id}`);
+                return (
+                  <span
+                    className={`rtl-port__value${value === undefined ? " is-unknown" : ""}`}
+                    style={valueTagLayout(block, port)}
+                    title={`${port.name}: ${describeSignalValue(value, port.width ?? 1)}`}
+                  >
+                    {formatSignalValue(value)}
+                  </span>
+                );
+              })()
+            ) : null}
           </div>
         );
       })}

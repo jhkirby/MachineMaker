@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import type { DiagramCommands } from "../state/use-diagram-commands";
@@ -97,6 +97,7 @@ export default function Toolbar({ commands }: ToolbarProps) {
   const canUndo = useDiagramStore((s) => s.past.length > 0);
   const canRedo = useDiagramStore((s) => s.future.length > 0);
   const theme = useDiagramStore((s) => s.theme);
+  const simulating = useDiagramStore((s) => s.mode === "simulate");
   const toggleTheme = useDiagramStore((s) => s.toggleTheme);
   const openMenu = useDiagramStore((s) => s.openMenu);
   const toggleMenu = useDiagramStore((s) => s.toggleMenu);
@@ -172,12 +173,12 @@ export default function Toolbar({ commands }: ToolbarProps) {
           allowSpaces
           ariaLabel="Diagram title"
           className="toolbar__doc-input"
+          disabled={simulating}
           onCommit={setTitle}
         />
       </div>
       <div className="toolbar__actions">
         <ViewControls commands={commands} />
-        <span className="toolbar__divider" />
         <button
           type="button"
           className="toolbar__icon-button"

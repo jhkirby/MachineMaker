@@ -24,7 +24,7 @@ export type RtlBlockNode = Node<{ block: RtlBlock }, "rtlBlock">;
 
 /** React Flow edge backed by an {@link RtlWire}, plus its routed polyline. */
 export type RtlWireEdge = Edge<
-  { wire: RtlWire; route?: RoutedWire; isBus: boolean },
+  { wire: RtlWire; route?: RoutedWire; isBus: boolean; width: number },
   "rtlWire"
 >;
 
@@ -171,7 +171,7 @@ export function toFlowEdges(
       target: wire.targetBlockId,
       sourceHandle: wire.sourcePortId,
       targetHandle: wire.targetPortId,
-      data: { wire, route: routes.get(wire.id), isBus },
+      data: { wire, route: routes.get(wire.id), isBus, width: sourcePort?.width ?? 1 },
       selected: selected.has(wire.id),
     };
   });

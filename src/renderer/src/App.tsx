@@ -23,6 +23,8 @@ import { useDiagramCommands } from "./state/use-diagram-commands";
 import { useKeyboardShortcuts } from "./state/use-keyboard-shortcuts";
 import { syncColorHistory } from "./state/color-history-store";
 import { startModuleLinkSync } from "./state/module-links";
+import { enforceSimulationReadiness } from "./state/simulation-readiness";
+import { startSimulationEngine } from "./state/simulation-store";
 import {
   activateTabByPath,
   attachTab,
@@ -45,8 +47,13 @@ export default function App() {
   const dirty = useDiagramStore((s) => s.dirty);
   const theme = useDiagramStore((s) => s.theme);
   const paletteCollapsed = useDiagramStore((s) => s.paletteCollapsed);
+  // The right sidebar opens for a selection — and always while simulating,
+  // when it carries the outputs (InspectorPanel.tsx).
   const hasSelection = useDiagramStore(
-    (s) => s.selection.blockIds.length > 0 || s.selection.wireIds.length > 0,
+    (s) =>
+      s.mode === "simulate" ||
+      s.selection.blockIds.length > 0 ||
+      s.selection.wireIds.length > 0,
   );
 
   useEffect(() => {
@@ -75,6 +82,13 @@ export default function App() {
 
   // Linked modules follow the schematics they link to (state/module-links).
   useEffect(() => startModuleLinkSync(), []);
+
+  // Simulate mode only lasts while the schematic stays simulation-ready.
+  useEffect(() => enforceSimulationReadiness(), []);
+
+  // The simulation engine: a fresh run on every entry into Simulate, and
+  // every port's value re-settled whenever an input or register changes.
+  useEffect(() => startSimulationEngine(), []);
 
   // Keep the main process told what this window has open, and answer its
   // two requests: take a tab dragged in from another window, and bring an

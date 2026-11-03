@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-04
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import type { DragEvent } from "react";
@@ -11,6 +11,7 @@ import { paletteFor } from "../model/block-appearance";
 import { COMPONENT_LIBRARY } from "../model/component-library";
 import { useDiagramStore } from "../state/diagram-store";
 import ComponentIcon from "./ComponentIcon";
+import SignalPanel from "./SignalPanel";
 
 /** MIME-like key used to carry a block kind through a drag operation. */
 export const PALETTE_DRAG_TYPE = "application/rtl-kind";
@@ -74,6 +75,7 @@ export default function ComponentPalette() {
   // Click toggles place mode: the same item turns it off, a different item
   // switches what's being placed. The canvas does the rest (DiagramCanvas).
   const togglePlacingKind = useDiagramStore((s) => s.togglePlacingKind);
+  const simulating = useDiagramStore((s) => s.mode === "simulate");
 
   const onDragStart = (event: DragEvent, kind: BlockKind) => {
     event.dataTransfer.setData(PALETTE_DRAG_TYPE, kind);
@@ -87,9 +89,15 @@ export default function ComponentPalette() {
   const onDragEnd = () => setDraggingKind(null);
 
   return (
-    <aside className={`palette${collapsed ? " palette--collapsed" : ""}`}>
+    <aside
+      className={`palette${collapsed ? " palette--collapsed" : ""}${
+        simulating ? " palette--simulating" : ""
+      }`}
+    >
       <div className="palette__header">
-        {!collapsed ? <h2 className="palette__heading">Components</h2> : null}
+        {!collapsed ? (
+          <h2 className="palette__heading">{simulating ? "Signals" : "Components"}</h2>
+        ) : null}
         <button
           type="button"
           className="palette__toggle"
@@ -102,8 +110,14 @@ export default function ComponentPalette() {
         </button>
       </div>
 
-      {/* Still listed when collapsed — just as icons, so the rail stays a
-          working palette rather than an empty strip. */}
+      {/* Simulating, the panel drives the schematic's inputs instead of
+          offering components (none can be placed); the collapsed rail has
+          no room for that, so it shows nothing. */}
+      {simulating ? (
+        collapsed ? null : <SignalPanel />
+      ) : (
+      /* Still listed when collapsed — just as icons, so the rail stays a
+         working palette rather than an empty strip. */
       <ul className="palette__list">
         {COMPONENT_LIBRARY.map((template) => {
           const colors = paletteFor(template.kind);
@@ -138,6 +152,7 @@ export default function ComponentPalette() {
           );
         })}
       </ul>
+      )}
     </aside>
   );
 }

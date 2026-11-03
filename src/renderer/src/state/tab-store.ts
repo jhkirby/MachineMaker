@@ -30,6 +30,8 @@ interface DocumentSnapshot {
   selection: DiagramStore["selection"];
   past: DiagramStore["past"];
   future: DiagramStore["future"];
+  /** Build or Simulate — each tab stays in the mode it was left in. */
+  mode: DiagramStore["mode"];
   /** Pan/zoom when the tab was left; null to fit the view on return. */
   viewport: Viewport | null;
 }
@@ -87,7 +89,7 @@ export function tabsFull(): boolean {
  * @returns The snapshot.
  */
 function captureLive(): DocumentSnapshot {
-  const { diagram, filePath, dirty, selection, past, future } =
+  const { diagram, filePath, dirty, selection, past, future, mode } =
     useDiagramStore.getState();
   return {
     diagram,
@@ -96,6 +98,7 @@ function captureLive(): DocumentSnapshot {
     selection,
     past,
     future,
+    mode,
     viewport: canvas?.getViewport() ?? null,
   };
 }
@@ -115,8 +118,10 @@ function restoreLive(snapshot: DocumentSnapshot): void {
     selection: snapshot.selection,
     past: snapshot.past,
     future: snapshot.future,
+    mode: snapshot.mode,
     pendingDelete: null,
     armedPort: null,
+    placingKind: null,
   });
   requestAnimationFrame(() => {
     if (snapshot.viewport) {
@@ -142,6 +147,7 @@ function freshSnapshot(diagram: RtlDiagram, filePath: string | null): DocumentSn
     selection: { blockIds: [], wireIds: [] },
     past: [],
     future: [],
+    mode: "build",
     viewport: null,
   };
 }
@@ -162,6 +168,7 @@ function snapshotFromTransfer(doc: TransferredDocument): DocumentSnapshot {
     selection: { blockIds: [], wireIds: [] },
     past: doc.past,
     future: doc.future,
+    mode: "build",
     viewport: doc.viewport,
   };
 }

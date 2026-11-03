@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import { useEffect, useMemo, useState } from "react";
@@ -38,6 +38,8 @@ interface NameInputProps {
   showCounter?: boolean;
   className?: string;
   ariaLabel?: string;
+  /** Read-only: shown, but not editable (e.g. in Simulate mode). */
+  disabled?: boolean;
 }
 
 /**
@@ -59,6 +61,7 @@ export default function NameInput({
   showCounter = true,
   className,
   ariaLabel,
+  disabled = false,
 }: NameInputProps) {
   const rules = useMemo<NameRules>(
     () => ({ allowSpaces, allowDigits }),
@@ -87,6 +90,7 @@ export default function NameInput({
   const input = (
     <input
       className={`${className ?? ""}${invalid ? " is-invalid" : ""}`.trim()}
+      disabled={disabled}
       value={draft}
       maxLength={maxLength}
       aria-label={ariaLabel}

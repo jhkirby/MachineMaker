@@ -76,6 +76,13 @@ export interface PointerPosition {
 /** The app's color scheme — see the `[data-theme]` block in tokens.css. */
 export type Theme = "dark" | "light";
 
+/**
+ * What the editor is for right now. "build" is ordinary editing;
+ * "simulate" locks the document — anything can still be selected and
+ * inspected, but nothing can be added, moved, wired, edited or deleted.
+ */
+export type EditorMode = "build" | "simulate";
+
 /** localStorage key the last-chosen theme is persisted under. */
 const THEME_STORAGE_KEY = "machinemaker:theme";
 
@@ -128,6 +135,15 @@ export interface DiagramStore {
   minimapVisible: boolean;
   /** The app's current color scheme, persisted across restarts. */
   theme: Theme;
+  /** Build (editing) or Simulate (read-only) — see {@link EditorMode}. */
+  mode: EditorMode;
+  /**
+   * Counts the times Simulate has been entered with {@link toggleMode} —
+   * each one starts a fresh run (registers and cycle back to 0). Restoring
+   * a tab that was already simulating doesn't touch it, so switching tabs
+   * carries on the run where it was.
+   */
+  simulationRunId: number;
   /** Whether the left component palette is collapsed to a slim rail. */
   paletteCollapsed: boolean;
   /**
@@ -187,6 +203,8 @@ export interface DiagramStore {
   setTitle(title: string): void;
 
   // ── view ──
+  /** Switch between Build and Simulate, leaving any half-done gesture. */
+  toggleMode(): void;
   toggleGrid(): void;
   /** Show or hide the canvas minimap. */
   toggleMinimap(): void;
@@ -323,7 +341,17 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
    *
    * @param mutate - Receives a mutable clone of the diagram to change in place.
    */
-  const commit = (mutate: (draft: RtlDiagram) => void): void => {
+  const commit = (
+    mutate: (draft: RtlDiagram) => void,
+    { evenWhileSimulating = false } = {},
+  ): void => {
+    // Simulate mode is read-only; every edit funnels through here, so this
+    // one check is what actually holds that line (the UI merely hides the
+    // controls). Only a linked module following its own schematic gets
+    // through, since that isn't an edit made here.
+    if (get().mode === "simulate" && !evenWhileSimulating) {
+      return;
+    }
     set((state) => {
       const before = snapshot(state.diagram);
       const draft = snapshot(state.diagram);
@@ -382,6 +410,8 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     gridVisible: true,
     minimapVisible: true,
     theme: loadStoredTheme(),
+    mode: "build",
+    simulationRunId: 0,
     paletteCollapsed: false,
     openMenu: null,
     draggingKind: null,
@@ -428,6 +458,17 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
 
     // ── VIEW ──────────────────────────────────────────────────────────────
 
+    toggleMode: () =>
+      set((state) => ({
+        mode: state.mode === "build" ? "simulate" : "build",
+        simulationRunId:
+          state.mode === "build" ? state.simulationRunId + 1 : state.simulationRunId,
+        placingKind: null,
+        draggingKind: null,
+        armedPort: null,
+        pendingDelete: null,
+      })),
+
     toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
     toggleMinimap: () =>
       set((state) => ({ minimapVisible: !state.minimapVisible })),
@@ -472,7 +513,11 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     // A half-finished wire and a pending placement would both claim the next
     // canvas click, so entering place mode drops any armed port.
     setPlacingKind: (kind) =>
-      set(kind ? { placingKind: kind, armedPort: null } : { placingKind: null }),
+      set(
+        kind && get().mode === "build"
+          ? { placingKind: kind, armedPort: null }
+          : { placingKind: null },
+      ),
 
     // Skips the update when nothing shown would change, so a mousemove
     // doesn't re-render the status bar for nothing.
@@ -491,7 +536,8 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     togglePlacingKind: (kind) =>
       get().setPlacingKind(get().placingKind === kind ? null : kind),
 
-    setArmedPort: (port) => set({ armedPort: port }),
+    setArmedPort: (port) =>
+      set({ armedPort: get().mode === "build" ? port : null }),
 
     // ── BLOCKS ────────────────────────────────────────────────────────────
 
@@ -508,7 +554,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
       }),
 
     moveBlock: (id, x, y) =>
-      set((state) => ({
+      set((state) => state.mode === "simulate" ? state : ({
         diagram: {
           ...state.diagram,
           blocks: state.diagram.blocks.map((block) =>
@@ -544,7 +590,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
       }),
 
     previewBlockColor: (id, color) =>
-      set((state) => ({
+      set((state) => state.mode === "simulate" ? state : ({
         diagram: {
           ...state.diagram,
           blocks: state.diagram.blocks.map((block) =>
@@ -555,7 +601,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
       })),
 
     previewResizeBlock: (id, width, height) =>
-      set((state) => ({
+      set((state) => state.mode === "simulate" ? state : ({
         diagram: {
           ...state.diagram,
           blocks: state.diagram.blocks.map((block) => {
@@ -872,13 +918,16 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
       if (!linked) {
         return;
       }
-      commit((draft) => {
-        for (const block of draft.blocks) {
-          if (isLinkedModule(block) && block.linkedModule?.path === path) {
-            reconcileModulePorts(block, definition);
+      commit(
+        (draft) => {
+          for (const block of draft.blocks) {
+            if (isLinkedModule(block) && block.linkedModule?.path === path) {
+              reconcileModulePorts(block, definition);
+            }
           }
-        }
-      });
+        },
+        { evenWhileSimulating: true },
+      );
     },
 
     // The ports stay exactly as they are — they're simply this schematic's
@@ -1012,7 +1061,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     },
 
     requestDeleteSelection: () => {
-      const { selection } = get();
+      const { selection, mode } = get();
+      if (mode === "simulate") {
+        return;
+      }
       if (selection.blockIds.length > 0) {
         set({
           pendingDelete: {
@@ -1040,6 +1092,9 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
 
     beginInteraction: () =>
       set((state) => {
+        if (state.mode === "simulate") {
+          return state;
+        }
         // Skip if the last snapshot already matches — avoids no-op undo steps
         // when a drag starts but the pointer never actually moves a block.
         const last = state.past[state.past.length - 1];
@@ -1054,7 +1109,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
 
     undo: () =>
       set((state) => {
-        if (state.past.length === 0) {
+        if (state.past.length === 0 || state.mode === "simulate") {
           return state;
         }
         const previous = state.past[state.past.length - 1];
@@ -1068,7 +1123,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
 
     redo: () =>
       set((state) => {
-        if (state.future.length === 0) {
+        if (state.future.length === 0 || state.mode === "simulate") {
           return state;
         }
         const next = state.future[0];

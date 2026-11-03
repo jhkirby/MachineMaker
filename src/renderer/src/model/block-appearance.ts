@@ -100,6 +100,48 @@ export const WIRE_COLOR = "#8b93a7";
 export const BUS_COLOR = "#5b8def";
 
 /**
+ * A wire's color in Simulate mode, from how many of its bits are 1:
+ * grey when none are, fully lit when all are, and in between for a bus
+ * partly lit (4 of 8 bits → halfway). "Lit" is white on the dark canvas;
+ * on the light canvas, where white would vanish, it's near-black instead.
+ */
+const SIMULATED_WIRE_BY_THEME: Record<Theme, { off: string; on: string }> = {
+  dark: { off: "#5d6475", on: "#ffffff" },
+  light: { off: "#b4bac6", on: "#14171c" },
+};
+
+/**
+ * Blend two `#rrggbb` colors.
+ *
+ * @param from - The color at t = 0.
+ * @param to - The color at t = 1.
+ * @param t - How far along, 0 to 1.
+ * @returns The blended color.
+ */
+function mixHex(from: string, to: string, t: number): string {
+  const a = hexToRgb(from);
+  const b = hexToRgb(to);
+  const channel = (i: number) =>
+    Math.round(a[i] + (b[i] - a[i]) * Math.min(1, Math.max(0, t)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${channel(0)}${channel(1)}${channel(2)}`;
+}
+
+/**
+ * A simulated wire's color for how lit it is (see activeFraction in
+ * signal-values.ts).
+ *
+ * @param fraction - Share of its bits that are 1, or undefined if unknown.
+ * @param theme - The app theme.
+ * @returns The stroke color; an unknown value draws as unlit.
+ */
+export function simulatedWireColor(fraction: number | undefined, theme: Theme): string {
+  const { off, on } = SIMULATED_WIRE_BY_THEME[theme];
+  return mixHex(off, on, fraction ?? 0);
+}
+
+/**
  * Highlight color for a selected wire, per theme — plain white reads clearly
  * against this app's dark canvas but nearly disappears against the light
  * one, which gets a dark grey instead.

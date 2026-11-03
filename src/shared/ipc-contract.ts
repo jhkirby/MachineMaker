@@ -127,6 +127,7 @@ export type EditorCommand =
   | "toggle-file-menu"
   | "toggle-export-menu"
   | "toggle-palette"
+  | "toggle-mode"
   | "deselect"
   | "select-all"
   | "close-tab"

@@ -160,7 +160,14 @@ async function refreshLinks(): Promise<void> {
   if (!projectPath) {
     return;
   }
-  for (const relative of linkedPaths()) {
+  // Direct links first (these are what this document's modules sync to),
+  // then whatever those link to in turn — the simulator runs modules all
+  // the way down, so it needs the whole tree loaded.
+  const queue = linkedPaths();
+  const seen = new Set(queue.map(pathKey));
+  const direct = new Set(seen);
+  while (queue.length > 0) {
+    const relative = queue.shift()!;
     let diagram: RtlDiagram | null;
     try {
       diagram = await window.rtl.loadDiagram(resolveInProject(projectPath, relative));
@@ -168,8 +175,18 @@ async function refreshLinks(): Promise<void> {
       diagram = null;
     }
     cacheLinkedSchematic(relative, diagram);
-    if (diagram) {
+    if (!diagram) {
+      continue;
+    }
+    if (direct.has(pathKey(relative))) {
       syncTo(relative, diagram);
+    }
+    for (const block of diagram.blocks) {
+      const nested = isLinkedModule(block) ? block.linkedModule!.path! : null;
+      if (nested && !seen.has(pathKey(nested))) {
+        seen.add(pathKey(nested));
+        queue.push(nested);
+      }
     }
   }
 }

@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { useStore } from "@xyflow/react";
 import type { DiagramCommands } from "../state/use-diagram-commands";
 import { useDiagramStore } from "../state/diagram-store";
+import EditorModeToggle from "./EditorModeToggle";
 
 /**
  * 16×16 stroked icon frame shared by every view-control glyph, matching the
@@ -61,6 +62,8 @@ export default function ViewControls({ commands }: ViewControlsProps) {
 
   return (
     <>
+      <EditorModeToggle />
+      <span className="toolbar__divider" />
       <button
         type="button"
         className="toolbar__icon-button"

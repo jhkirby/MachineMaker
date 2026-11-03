@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-04
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import {
@@ -148,6 +148,7 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
   const theme = useDiagramStore((s) => s.theme);
   const draggingKind = useDiagramStore((s) => s.draggingKind);
   const placingKind = useDiagramStore((s) => s.placingKind);
+  const simulating = useDiagramStore((s) => s.mode === "simulate");
   const setPlacingKind = useDiagramStore((s) => s.setPlacingKind);
   const setPointer = useDiagramStore((s) => s.setPointer);
   const armedPort = useDiagramStore((s) => s.armedPort);
@@ -734,7 +735,9 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
 
   return (
     <div
-      className={`canvas${placingKind ? " canvas--placing" : ""}`}
+      className={`canvas${placingKind ? " canvas--placing" : ""}${
+        simulating ? " canvas--simulating" : ""
+      }`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
@@ -775,6 +778,9 @@ function DiagramCanvasImpl(_props: unknown, ref: React.Ref<CanvasHandle>) {
         // component goes through the confirmation popup rather than React
         // Flow deleting it outright.
         deleteKeyCode={null}
+        // Simulate mode is read-only: blocks can be selected but not moved.
+        // (The store refuses the edits too; this just stops the gesture.)
+        nodesDraggable={!simulating}
         defaultEdgeOptions={{ type: "rtlWire" }}
       >
         {gridVisible ? <AdaptiveGridBackground /> : null}

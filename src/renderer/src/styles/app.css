@@ -490,6 +490,40 @@ input.is-invalid:focus {
   margin: 0 var(--space-1);
 }
 
+/* The Build / Simulate switch (EditorModeToggle.tsx): the inspector's
+   segmented .mode-toggle, sized down to sit in the toolbar row. Uses the
+   app accent, since it isn't tied to any one block's color. */
+/* Doubled class: the base .mode-toggle rule (display: flex) comes later in
+   this file at equal specificity and would otherwise win. */
+.mode-toggle.mode-toggle--toolbar {
+  --block-stroke: var(--accent);
+  /* A grid of equal 1fr columns in a shrink-to-fit box: each column takes
+     the width of the widest label, so both segments are the same size. */
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  height: 28px;
+  flex-shrink: 0;
+}
+
+/* Simulate while the schematic isn't simulation-ready: dimmed and inert,
+   but still hoverable so its tooltip can say what's missing. */
+.mode-toggle--toolbar .mode-toggle__option.is-unavailable {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mode-toggle--toolbar .mode-toggle__option.is-unavailable:hover {
+  background: var(--surface-raised);
+}
+
+.mode-toggle--toolbar .mode-toggle__option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-3);
+  font-size: 12px;
+}
+
 /* Round icon button — the day/night theme toggle and the undo/redo arrows,
    sized to match the canvas's own zoom/fit/lock controls
    (.react-flow__controls-button) so every "circular icon action" in the app
@@ -1350,6 +1384,29 @@ input.is-invalid:focus {
    set inline per-port, and an inline style fully replaces a stylesheet's
    `transform` for that element rather than combining with it, so a
    `transform` declared only here would just be silently discarded. */
+/* A port's simulated value (Simulate mode), in a small tag just outside
+   the block beside its bubble — see valueTagLayout in RtlBlockNode.tsx.
+   Opaque so a wire running under it doesn't make it unreadable. */
+.rtl-port__value {
+  position: absolute;
+  z-index: 3;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--text-primary);
+  background: var(--surface-panel);
+  border: 1px solid var(--block-stroke, var(--border-strong));
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.rtl-port__value.is-unknown {
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+
 .rtl-port__label {
   position: absolute;
   font-size: 9px;
@@ -1558,6 +1615,188 @@ input.is-invalid:focus {
 
 .field--centered .stepper {
   align-self: center;
+}
+
+/* Simulate mode's read-only inspector (SimulationInspector.tsx): plain
+   label/value facts and a port list — no controls. */
+.sim-inspector__fact {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 12px;
+}
+
+.sim-inspector__label {
+  color: var(--text-secondary);
+}
+
+.sim-inspector__value {
+  color: var(--text-primary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.sim-inspector__ports {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sim-inspector__port {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 12px;
+}
+
+.sim-inspector__port-name {
+  color: var(--text-primary);
+}
+
+.sim-inspector__port-meta {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* ── SIGNAL PANEL ─────────────────────────────────────────────────────────── */
+
+/* The left panel in Simulate mode (SignalPanel.tsx). It still scrolls when
+   there are more inputs than fit, but draws no scrollbar. */
+.palette--simulating {
+  scrollbar-width: none;
+}
+
+.palette--simulating::-webkit-scrollbar {
+  display: none;
+}
+
+.signal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.signal-panel__search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  color: var(--text-muted);
+  background: var(--surface-canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.signal-panel__search:focus-within {
+  border-color: var(--accent);
+}
+
+/* The wrapper draws the box; the input inside is bare. */
+.signal-panel__search-input,
+.signal-panel__search-input:focus {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+.signal-panel__clock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.signal-panel__strobe {
+  flex: 1;
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.signal-panel__strobe:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.signal-panel__cycle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.signal-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.signal-panel__empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Name on the left (cut off with an ellipsis if long), value box right. */
+.signal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.signal-row__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.signal-row__width {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* An output's value: read-only, in the same spot and font as an input's
+   value box, but plain text. "X" (unknown) is muted. */
+.signal-row__readout {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signal-row__readout.is-unknown {
+  color: var(--text-muted);
+}
+
+/* The second heading in the simulate-mode sidebar, below the outputs. */
+.inspector__heading--spaced {
+  margin-top: var(--space-5);
+}
+
+.signal-row__value {
+  min-width: 0;
+  padding: 2px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+}
+
+/* Nothing on the canvas can be dragged or wired while simulating. */
+.canvas--simulating .rtl-port {
+  cursor: default;
 }
 
 /* Short explanation under a field that's locked, saying what unlocks it. */

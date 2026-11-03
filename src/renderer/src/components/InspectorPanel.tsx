@@ -38,6 +38,8 @@ import ColorPicker from "./ColorPicker";
 import CommitInput from "./CommitInput";
 import Dropdown from "./Dropdown";
 import ModuleLinkSection from "./ModuleLinkSection";
+import OutputPanel from "./OutputPanel";
+import SimulationInspector from "./SimulationInspector";
 import NameInput from "./NameInput";
 import NumericField from "./NumericField";
 import StepButtons from "./StepButtons";
@@ -66,8 +68,11 @@ const MAX_BLOCK_CELLS_DIGITS = String(MAX_BLOCK_CELLS).length;
 export default function InspectorPanel() {
   const diagram = useDiagramStore((s) => s.diagram);
   const selection = useDiagramStore((s) => s.selection);
+  const simulating = useDiagramStore((s) => s.mode === "simulate");
   const hasSelection =
     selection.blockIds.length > 0 || selection.wireIds.length > 0;
+  // Always open while simulating: it carries the outputs then.
+  const open = hasSelection || simulating;
 
   const block =
     selection.blockIds.length === 1 && selection.wireIds.length === 0
@@ -80,11 +85,26 @@ export default function InspectorPanel() {
 
   return (
     <aside
-      className={`inspector${hasSelection ? " inspector--open" : ""}`}
-      aria-hidden={!hasSelection}
+      className={`inspector${open ? " inspector--open" : ""}`}
+      aria-hidden={!open}
     >
-      <h2 className="inspector__heading">Inspector</h2>
-      {block ? (
+      {/* Simulate mode: the outputs first, then a plain read-only summary
+          of the selection (no controls — nothing can be edited). */}
+      {simulating ? (
+        <>
+          <h2 className="inspector__heading">Outputs</h2>
+          <OutputPanel />
+          {hasSelection ? (
+            <>
+              <h2 className="inspector__heading inspector__heading--spaced">Inspector</h2>
+              <SimulationInspector block={block} wire={wire} />
+            </>
+          ) : null}
+        </>
+      ) : (
+        <h2 className="inspector__heading">Inspector</h2>
+      )}
+      {simulating ? null : block ? (
         <BlockInspector block={block} />
       ) : wire ? (
         <WireInspector wire={wire} />

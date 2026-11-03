@@ -14,8 +14,11 @@ import {
 import {
   BUS_COLOR,
   selectionColorFor,
+  simulatedWireColor,
   WIRE_COLOR,
 } from "../../model/block-appearance";
+import { activeFraction } from "../../model/signal-values";
+import { useSimulationStore } from "../../state/simulation-store";
 import type { RtlWireEdge as RtlWireEdgeType } from "../../model/flow-adapters";
 import { useDiagramStore } from "../../state/diagram-store";
 import { midpointOfPolyline, routeToPath } from "../../model/wire-router";
@@ -43,11 +46,19 @@ export default function RtlWireEdge({
   const wire = data?.wire;
   const route = data?.route;
   const isBus = Boolean(data?.isBus);
+  // Simulating, a wire lights up with its value: the share of its bits that
+  // are 1 (its driving port's value), grey at none through fully lit at all.
+  const simulating = useDiagramStore((s) => s.mode === "simulate");
+  const value = useSimulationStore((s) =>
+    wire ? s.ports.get(`${wire.sourceBlockId}/${wire.sourcePortId}`) : undefined,
+  );
   const color = selected
     ? selectionColorFor(theme)
-    : isBus
-      ? BUS_COLOR
-      : WIRE_COLOR;
+    : simulating
+      ? simulatedWireColor(activeFraction(value, data?.width ?? 1), theme)
+      : isBus
+        ? BUS_COLOR
+        : WIRE_COLOR;
   const strokeWidth = isBus ? 3 : 1.5;
 
   let path: string;

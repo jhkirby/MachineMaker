@@ -17,6 +17,7 @@ import { SvgExporter } from "../model/svg-exporter";
 import type { RtlDiagram } from "../../../shared/diagram-model";
 import { saveNow } from "./use-autosave";
 import { useDiagramStore } from "./diagram-store";
+import { toggleEditorMode } from "./simulation-readiness";
 import { requestName } from "./name-prompt-store";
 import { openSchematicPicker } from "./schematic-picker-store";
 import { closeTab, openInNewTab, tabsFull, useTabStore } from "./tab-store";
@@ -52,6 +53,25 @@ export interface DiagramCommands {
   deselect(): void;
   /** Route a command name (from a keyboard chord) to the matching action. */
   run(command: EditorCommand): void;
+}
+
+/** Commands that change the document — unavailable in Simulate mode. */
+const EDITING_COMMANDS: ReadonlySet<EditorCommand> = new Set<EditorCommand>([
+  "undo",
+  "redo",
+  "delete-selection",
+  "add-port",
+  "focus-title",
+]);
+
+/**
+ * Whether a command edits the document (placing a component included).
+ *
+ * @param command - The command.
+ * @returns True if Simulate mode should refuse it.
+ */
+function isEditingCommand(command: EditorCommand): boolean {
+  return EDITING_COMMANDS.has(command) || command.startsWith("place-");
 }
 
 /**
@@ -268,6 +288,15 @@ ${error instanceof Error ? error.message : String(error)}`,
       togglePalette,
       deselect,
       run: (command) => {
+        // Simulate mode is read-only: the commands that would edit the
+        // document stand down (the store refuses them too), while
+        // everything else — navigation, selection, files, view — works.
+        if (
+          useDiagramStore.getState().mode === "simulate" &&
+          isEditingCommand(command)
+        ) {
+          return;
+        }
         const togglePlacing = useDiagramStore.getState().togglePlacingKind;
         const table: Record<EditorCommand, () => void> = {
           new: () => void newDiagram(),
@@ -289,6 +318,7 @@ ${error instanceof Error ? error.message : String(error)}`,
           "toggle-file-menu": toggleFileMenu,
           "toggle-export-menu": toggleExportMenu,
           "toggle-palette": togglePalette,
+          "toggle-mode": () => void toggleEditorMode(),
           deselect,
           "select-all": selectAll,
           "close-tab": () => void closeCurrentTab(),
