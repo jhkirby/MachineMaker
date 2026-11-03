@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import {
@@ -15,6 +15,7 @@ import {
 import {
   BUS_COLOR,
   WIRE_COLOR,
+  blockKindLabel,
   resolvePalette,
 } from "./block-appearance";
 import { midpoint, portPosition, wirePath } from "./port-geometry";
@@ -118,7 +119,7 @@ export class SvgExporter {
         `${escapeXml(block.label)}</text>`,
       `<text x="${block.x + block.width / 2}" y="${block.y + 30}" ` +
         `text-anchor="middle" fill="${palette.stroke}" font-size="10">` +
-        `${escapeXml(block.kind === "gate" ? (block.gateType ?? "AND") : block.kind)}</text>`,
+        `${escapeXml(blockKindLabel(block))}</text>`,
     ];
 
     for (const port of block.ports) {
@@ -151,9 +152,15 @@ export class SvgExporter {
         : "end"
       : "start";
     const label = portLabelText(port);
+    // A tied-off port gets the same X through it as on the canvas.
+    const tieMark = port.tiedOff
+      ? `<path d="M${anchor.x - 5} ${anchor.y - 5}l10 10M${anchor.x + 5} ${anchor.y - 5}l-10 10" ` +
+        `stroke="${WIRE_COLOR}" stroke-width="1.8" stroke-linecap="round"/>`
+      : "";
 
     return (
       `<circle cx="${anchor.x}" cy="${anchor.y}" r="3" fill="${WIRE_COLOR}"/>` +
+      tieMark +
       `<line x1="${anchor.x}" y1="${anchor.y}" x2="${tickEnd.x}" y2="${tickEnd.y}" ` +
       `stroke="${WIRE_COLOR}" stroke-width="1.5"/>` +
       `<text x="${labelX}" y="${labelY}" text-anchor="${labelAnchor}" ` +

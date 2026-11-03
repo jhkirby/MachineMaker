@@ -13,7 +13,11 @@ import {
   type RtlBlock,
   type RtlPort,
 } from "../../../../shared/diagram-model";
-import { resolvePalette, withAlpha } from "../../model/block-appearance";
+import {
+  blockKindLabel,
+  resolvePalette,
+  withAlpha,
+} from "../../model/block-appearance";
 import { GRID_SIZE } from "../../model/grid";
 import {
   resolvePortPairConnection,
@@ -252,6 +256,10 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
   const handlePortClick = useCallback(
     (port: RtlPort) => {
       const here = { blockId: block.id, portId: port.id };
+      // A tied-off port can't take a wire, so it can't start one either.
+      if (!armedPort && port.tiedOff) {
+        return;
+      }
       if (!armedPort) {
         setArmedPort(here);
         return;
@@ -316,7 +324,7 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
       <div className="rtl-block__header">
         <div className="rtl-block__title">{block.label}</div>
         <div className="rtl-block__kind" style={{ color: palette.stroke }}>
-          {block.kind === "gate" ? (block.gateType ?? "AND") : block.kind}
+          {blockKindLabel(block)}
         </div>
       </div>
 
@@ -341,6 +349,7 @@ function RtlBlockNodeComponent({ data, selected }: NodeProps<RtlBlockNodeType>) 
           "rtl-port",
           `rtl-port--${port.direction}`,
           isClock ? "rtl-port--clock" : "",
+          port.tiedOff ? "rtl-port--tied" : "",
           isArmed ? "rtl-port--armed" : "",
           isConnectable ? "rtl-port--connectable" : "",
           isIncompatible ? "rtl-port--incompatible" : "",

@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 // Plain, serializable description of an RTL block diagram. Shared between the
@@ -21,7 +21,30 @@ export type PortSide = "left" | "right" | "top" | "bottom";
 export type PortDirection = "in" | "out" | "inout";
 
 /** Visual/semantic family of a block. Drives styling and default port layout. */
-export type BlockKind = "module" | "register" | "io" | "constant" | "gate";
+export type BlockKind =
+  | "module"
+  | "register"
+  | "io"
+  | "constant"
+  | "gate"
+  | "codec"
+  | "mux";
+
+/**
+ * Which way a `"codec"` block translates — chosen from the Type toggle in
+ * the inspector (InspectorPanel.tsx). A decoder turns {@link RtlBlock.bits}
+ * inputs into 2^bits one-hot outputs; an encoder is the reverse. Meaningless
+ * on any other kind.
+ */
+export type CodecType = "encoder" | "decoder";
+
+/**
+ * Smallest and largest {@link RtlBlock.bits} a codec or multiplexer may
+ * declare. The ceiling keeps the widest of them (a 4-to-16 decoder, or a
+ * 16:1 mux with 4 selects and 1 output) comfortably under {@link MAX_PORTS}.
+ */
+export const MIN_STRUCTURED_BITS = 1;
+export const MAX_STRUCTURED_BITS = 4;
 
 /**
  * Which boolean function a `"gate"` block computes — chosen from the button
@@ -97,6 +120,19 @@ export interface RtlPort {
    * width annotation; anything larger renders as `[width-1:0]`.
    */
   width?: number;
+  /**
+   * What a port is for, when its direction alone doesn't say — only set on
+   * a `"mux"` block's select lines (`"select"`), which share the `"in"`
+   * direction with its data inputs. Omitted everywhere else.
+   */
+  role?: "select";
+  /**
+   * Deliberately left unconnected — "tied off" — so a diagram can be
+   * complete without wiring every port. Drawn with an X through the port,
+   * and a tied-off port can't take a wire. Only ever set where
+   * {@link canTieOff} allows; omitted otherwise.
+   */
+  tiedOff?: true;
 }
 
 /**
@@ -147,6 +183,24 @@ export function isClockPort(port: RtlPort): boolean {
  */
 export function isResetPort(port: RtlPort): boolean {
   return /reset|rst/i.test(port.name);
+}
+
+/**
+ * Whether a port may be tied off (see {@link RtlPort.tiedOff}). An I/O pin
+ * or constant exists only to be wired, so neither offers it, and a clock
+ * or reset is structural, never optional, so neither of those does either.
+ *
+ * @param kind - The owning block's kind.
+ * @param port - The port.
+ * @returns True if the port can be tied off.
+ */
+export function canTieOff(kind: BlockKind, port: RtlPort): boolean {
+  return (
+    kind !== "io" &&
+    kind !== "constant" &&
+    !isClockPort(port) &&
+    !isResetPort(port)
+  );
 }
 
 /**
@@ -219,6 +273,24 @@ export interface RtlBlock {
    * model/component-library.ts). Omitted on every other kind.
    */
   gateRotation?: GateRotation;
+  /**
+   * Encoder or decoder — only meaningful when `kind` is `"codec"`, where
+   * it's always set (see createBlock in model/component-library.ts).
+   */
+  codecType?: CodecType;
+  /**
+   * The inspector's "Size" — only meaningful on `"codec"` and `"mux"`,
+   * where it's always set. For a decoder it's the input count (3 → a
+   * 3-to-8 decoder), for an encoder the output count (3 → 8-to-3), and for
+   * a mux the select-line count (3 → 8 data inputs). The ports themselves
+   * follow from it — see model/structured-ports.ts.
+   */
+  bits?: number;
+  /**
+   * Bus width of a `"mux"` block's data inputs and output (its selects
+   * stay 1 bit). Always set on a mux; omitted on every other kind.
+   */
+  dataWidth?: number;
   /**
    * The design this block stands for — only meaningful when `kind` is
    * `"module"`. Omitted means the block is unlinked: a free-standing box on

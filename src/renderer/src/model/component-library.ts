@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import { nanoid } from "nanoid";
@@ -15,6 +15,15 @@ import type {
 } from "../../../shared/diagram-model";
 import { GRID_SIZE } from "./grid";
 import { nextNumberedName } from "./naming";
+import { growToFitPorts } from "./port-layout";
+import {
+  DEFAULT_CODEC_BITS,
+  DEFAULT_CODEC_TYPE,
+  DEFAULT_MUX_BITS,
+  DEFAULT_MUX_DATA_WIDTH,
+  conformStructuredPorts,
+  isStructuredKind,
+} from "./structured-ports";
 
 /** A port slot in a template, before an id is assigned. */
 interface PortTemplate {
@@ -114,6 +123,29 @@ export const COMPONENT_LIBRARY: readonly ComponentTemplate[] = [
     ],
   },
   {
+    kind: "codec",
+    placeKey: "d",
+    displayName: "Codec",
+    hint: "Encoder / decoder (e.g. 3-to-8 decoder)",
+    defaultWidth: cells(10),
+    defaultHeight: cells(6),
+    // No template ports: a codec's ports follow entirely from its type and
+    // size (see conformStructuredPorts in structured-ports.ts), which
+    // createBlock stamps on below.
+    ports: [],
+  },
+  {
+    kind: "mux",
+    placeKey: "x",
+    displayName: "Multiplexer",
+    baseName: "Mux",
+    hint: "Selects one of 2^n data inputs",
+    defaultWidth: cells(10),
+    defaultHeight: cells(6),
+    // Derived from size and data width, same as a codec's.
+    ports: [],
+  },
+  {
     kind: "io",
     placeKey: "i",
     displayName: "I/O Port",
@@ -204,6 +236,21 @@ export function createBlock(
   if (kind === "gate") {
     block.gateType = "AND";
     block.gateRotation = "right";
+  }
+  if (kind === "codec") {
+    block.codecType = DEFAULT_CODEC_TYPE;
+    block.bits = DEFAULT_CODEC_BITS;
+  }
+  if (kind === "mux") {
+    block.bits = DEFAULT_MUX_BITS;
+    block.dataWidth = DEFAULT_MUX_DATA_WIDTH;
+  }
+  // Built here rather than left to the store's commit pass so a block is
+  // whole the moment it exists — the palette's drag preview sizes itself
+  // from this same call, before anything is committed.
+  if (isStructuredKind(kind)) {
+    conformStructuredPorts(block);
+    growToFitPorts(block);
   }
   return block;
 }

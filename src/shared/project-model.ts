@@ -35,6 +35,13 @@ export const SCHEMATIC_EXTENSION = "rtlproj";
 /** Current manifest schema version. */
 export const PROJECT_SCHEMA_VERSION = 1;
 
+/**
+ * Most colors a recent-colors history keeps — exactly the inspector's preset
+ * swatch slots (COLOR_SWATCHES in block-appearance.ts), which the history
+ * fills from the first slot on.
+ */
+export const MAX_RECENT_COLORS = 17;
+
 /** Most documents an editor window holds open as tabs at once. */
 export const MAX_EDITOR_TABS = 8;
 
@@ -56,6 +63,11 @@ export interface ProjectManifest {
   name: string;
   /** ISO-8601 creation time. */
   createdAt: string;
+  /**
+   * Block colors used most recently in this project, newest first — see
+   * ColorHistoryService. Absent until the first color is picked.
+   */
+  recentColors?: string[];
 }
 
 /** One schematic inside a project, loaded for the project page. */

@@ -13,6 +13,7 @@ import {
   autosaveFolderName,
   configureDataPaths,
 } from "./app-channel";
+import { ColorHistoryService } from "./color-history-service";
 import { IpcHandlers } from "./ipc-handlers";
 import { OpenDocumentRegistry } from "./open-document-registry";
 import { ProjectFileService } from "./project-file-service";
@@ -47,6 +48,7 @@ new IpcHandlers(
   new ProjectService(fileService),
   new RecentProjectsStore(join(app.getPath("userData"), "recent-projects.json")),
   new OpenDocumentRegistry(),
+  new ColorHistoryService(join(app.getPath("userData"), "recent-colors.json")),
 ).register();
 
 Menu.setApplicationMenu(null);

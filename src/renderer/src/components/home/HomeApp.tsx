@@ -16,9 +16,17 @@ import { formatDate, relativeTime } from "../../model/project-stats";
 import ListPickerDialog from "../ListPickerDialog";
 import NamePromptDialog from "../NamePromptDialog";
 import TitleBar from "../TitleBar";
+import TypedDeleteDialog from "../TypedDeleteDialog";
 import CircuitBackdrop from "./CircuitBackdrop";
 import LandingView from "./LandingView";
-import ProjectView from "./ProjectView";
+import type { ProjectFileItem } from "./ProjectFileSection";
+import ProjectView, { type ProjectFileKind } from "./ProjectView";
+
+/** A project file waiting on the type-DELETE popup. */
+interface PendingFileDelete {
+  kind: ProjectFileKind;
+  item: ProjectFileItem;
+}
 
 /**
  * Describe a failed IPC call for the error banner.
@@ -46,6 +54,9 @@ export default function HomeApp() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<PendingFileDelete | null>(
+    null,
+  );
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -180,6 +191,21 @@ export default function HomeApp() {
       }
     });
 
+  const confirmDelete = () => {
+    const request = pendingDelete;
+    setPendingDelete(null);
+    void run(async () => {
+      if (project && request) {
+        setProject(
+          await window.rtl.deleteProjectFile({
+            projectPath: project.path,
+            filePath: request.item.path,
+          }),
+        );
+      }
+    });
+  };
+
   return (
     <div className="home">
       <TitleBar />
@@ -226,6 +252,7 @@ export default function HomeApp() {
               onBack={backToLanding}
               onNewSchematic={newSchematic}
               onOpenSchematic={openSchematic}
+              onDeleteFile={(kind, item) => setPendingDelete({ kind, item })}
             />
           ) : (
             <LandingView
@@ -240,6 +267,17 @@ export default function HomeApp() {
         </div>
       </main>
       <NamePromptDialog />
+      {pendingDelete ? (
+        <TypedDeleteDialog
+          key={pendingDelete.item.path}
+          title={`Delete ${pendingDelete.item.name}?`}
+          detail={`This ${pendingDelete.kind} will be moved to the ${
+            window.rtl.platform === "win32" ? "Recycle Bin" : "trash"
+          }.`}
+          onConfirm={confirmDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      ) : null}
       {pickerOpen ? (
         <ListPickerDialog
           title="Open Project"

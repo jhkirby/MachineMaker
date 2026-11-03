@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-04
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 // Getting a block onto the canvas: the palette's contents, its collapse rail,
@@ -47,6 +47,9 @@ test.describe("component palette", () => {
     await expect(editor.paletteItems).toHaveText([
       "Module",
       "Register",
+      "Gate",
+      "Codec",
+      "Multiplexer",
       "I/O Port",
       "Constant",
     ]);
@@ -67,7 +70,7 @@ test.describe("component palette", () => {
     await expect(editor.paletteToggle).toHaveAttribute("aria-label", "Expand panel");
 
     await editor.paletteToggle.click();
-    await expect(editor.paletteItems).toHaveCount(4);
+    await expect(editor.paletteItems).toHaveCount(7);
   });
 
   test("double-click drops a block", async ({ editor }) => {

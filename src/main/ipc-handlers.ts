@@ -5,11 +5,16 @@
  * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
-import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from "electron";
+import {
+  BrowserWindow,
+  ipcMain,
+  type IpcMainInvokeEvent,
+} from "electron";
 import { IpcChannel } from "../shared/ipc-contract";
 import { MAX_EDITOR_TABS } from "../shared/project-model";
 import type {
   CreateSchematicRequest,
+  DeleteProjectFileRequest,
   DetachTabRequest,
   DetachTabResult,
   ExportImageRequest,
@@ -17,9 +22,11 @@ import type {
   TabAttachEvent,
   OpenDiagramRequest,
   OpenEditorRequest,
+  RecentColorsEvent,
   SaveDiagramRequest,
   SchematicFileFormat,
 } from "../shared/ipc-contract";
+import type { ColorHistoryService } from "./color-history-service";
 import type { ProjectFileService } from "./project-file-service";
 import type { OpenDocumentRegistry } from "./open-document-registry";
 import type { ProjectService } from "./project-service";
@@ -55,6 +62,7 @@ export class IpcHandlers {
    * @param projects - Creates and reads project folders.
    * @param recents - The home page's recent-projects list.
    * @param documents - Which documents each editor window has open.
+   * @param colors - Each project's recently used block colors.
    */
   constructor(
     private readonly windows: WindowManager,
@@ -62,6 +70,7 @@ export class IpcHandlers {
     private readonly projects: ProjectService,
     private readonly recents: RecentProjectsStore,
     private readonly documents: OpenDocumentRegistry,
+    private readonly colors: ColorHistoryService,
   ) {
     windows.onWindowClosed((id) => documents.forget(id));
   }
@@ -181,6 +190,41 @@ export class IpcHandlers {
 
     this.handle(IpcChannel.RemoveRecentProject, (_event, path: unknown) =>
       this.recents.remove(requireString(path, "path")),
+    );
+
+    this.handle(IpcChannel.ListRecentColors, (_event, projectPath: unknown) =>
+      this.colors.list(typeof projectPath === "string" ? projectPath : null),
+    );
+
+    this.handle(
+      IpcChannel.UseRecentColor,
+      async (_event, projectPath: unknown, color: unknown) => {
+        const project = typeof projectPath === "string" ? projectPath : null;
+        const colors = await this.colors.use(project, requireString(color, "color"));
+        // Every window on this project — this one included — redraws its
+        // swatches from the one shared history.
+        const event: RecentColorsEvent = { projectPath: project, colors };
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.webContents.send(IpcChannel.RecentColorsChanged, event);
+        }
+        return colors;
+      },
+    );
+
+    this.handle(
+      IpcChannel.DeleteProjectFile,
+      (_event, request: DeleteProjectFileRequest) => {
+        const projectPath = requireString(request?.projectPath, "projectPath");
+        const filePath = requireString(request?.filePath, "filePath");
+        // An editor window still holding the file would autosave it straight
+        // back into existence — it has to be closed there first.
+        if (this.documents.windowWith(filePath) !== null) {
+          throw new Error(
+            "It's open in an editor window — close its tab first, then delete it.",
+          );
+        }
+        return this.projects.deleteProjectFile(projectPath, filePath);
+      },
     );
   }
 

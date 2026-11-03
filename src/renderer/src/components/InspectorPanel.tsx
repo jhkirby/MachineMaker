@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import {
@@ -11,6 +11,7 @@ import {
   MAX_BUS_WIDTH,
   MAX_PORTS,
   MIN_BUS_WIDTH,
+  canTieOff,
   countedPorts,
   isClockPort,
   isResetPort,
@@ -26,12 +27,19 @@ import {
 import { paletteFor, resolvePalette, withAlpha } from "../model/block-appearance";
 import { GRID_SIZE } from "../model/grid";
 import { minBlockSize } from "../model/port-layout";
+import { hasWiresOn, isStructuredKind } from "../model/structured-ports";
+import {
+  swatchSlots,
+  useColorHistoryStore,
+} from "../state/color-history-store";
 import { useDiagramStore } from "../state/diagram-store";
 import ColorPicker from "./ColorPicker";
 import CommitInput from "./CommitInput";
 import Dropdown from "./Dropdown";
 import NameInput from "./NameInput";
 import NumericField from "./NumericField";
+import StepButtons from "./StepButtons";
+import StructuredBlockSettings from "./StructuredBlockSettings";
 
 const SIDES: PortSide[] = ["left", "right", "top", "bottom"];
 const DIRECTIONS: PortDirection[] = ["in", "out", "inout"];
@@ -112,60 +120,6 @@ function DocumentInspector() {
 }
 
 /**
- * The − and + buttons flanking a number field — the app's own stand-in for
- * Chromium's native spin buttons, which can't be themed and are hidden
- * globally (app.css, RESET / BASE). Rendered after the input in the DOM but
- * placed either side of it by CSS `order` (.stepper__button--dec/--inc), so
- * Tab still lands on the field first.
- *
- * @param props.label - What the field holds, for the buttons' labels.
- * @param props.canIncrement - False at the field's maximum, disabling "+".
- * @param props.canDecrement - False at the field's minimum, disabling "−".
- * @param props.onStep - Called with +1 or -1.
- * @returns The two buttons.
- */
-function StepButtons({
-  label,
-  canIncrement,
-  canDecrement,
-  onStep,
-}: {
-  label: string;
-  canIncrement: boolean;
-  canDecrement: boolean;
-  onStep: (delta: 1 | -1) => void;
-}) {
-  return (
-    <>
-      <button
-        type="button"
-        className="stepper__button stepper__button--dec"
-        aria-label={`Decrease ${label}`}
-        tabIndex={-1}
-        disabled={!canDecrement}
-        onClick={() => onStep(-1)}
-      >
-        <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true">
-          <path d="M1.5 5h7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-      </button>
-      <button
-        type="button"
-        className="stepper__button stepper__button--inc"
-        aria-label={`Increase ${label}`}
-        tabIndex={-1}
-        disabled={!canIncrement}
-        onClick={() => onStep(1)}
-      >
-        <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true">
-          <path d="M1.5 5h7M5 1.5v7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-      </button>
-    </>
-  );
-}
-
-/**
  * Editable properties for a single block, including its port table.
  *
  * @param props.block - The selected block.
@@ -182,6 +136,8 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   const addPort = useDiagramStore((s) => s.addPort);
   const updatePort = useDiagramStore((s) => s.updatePort);
   const removePort = useDiagramStore((s) => s.removePort);
+  const toggleTieOff = useDiagramStore((s) => s.toggleTieOff);
+  const wires = useDiagramStore((s) => s.diagram.wires);
   const setModuleSequential = useDiagramStore((s) => s.setModuleSequential);
   const setGateType = useDiagramStore((s) => s.setGateType);
   const setGateRotation = useDiagramStore((s) => s.setGateRotation);
@@ -189,6 +145,8 @@ function BlockInspector({ block }: { block: RtlBlock }) {
     (s) => s.createModuleFromBlock,
   );
   const unlinkModule = useDiagramStore((s) => s.unlinkModule);
+  const recentColors = useColorHistoryStore((s) => s.recent);
+  const recordColor = useColorHistoryStore((s) => s.use);
 
   const otherBlockNames = blocks
     .filter((b) => b.id !== block.id)
@@ -221,10 +179,21 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   // port-layout.ts) holds its one output to "out" and forces every other
   // port to "in" regardless, so a Drive dropdown here would only ever snap
   // back on the next render.
+  // A codec's or mux's directions are likewise fixed — by its Type and
+  // layout rather than per port (see structured-ports.ts).
   const hasFixedDirection = (port: RtlPort): boolean =>
     isClockOrReset(port) ||
     (block.kind === "register" && (port.name === "d" || port.name === "q")) ||
-    block.kind === "gate";
+    block.kind === "gate" ||
+    isStructuredKind(block.kind);
+
+  // Kinds whose every port is a plain 1-bit wire, so the Ports table drops
+  // its Width column rather than showing "1" on every row.
+  const hidesWidth = block.kind === "gate" || block.kind === "codec";
+
+  // An I/O pin or constant never offers a tie-off (see canTieOff), so its
+  // table drops the column rather than leaving it empty on every row.
+  const hidesTieOff = block.kind === "io" || block.kind === "constant";
 
   // clk/reset are always exactly 1 bit — a bus doesn't mean anything for a
   // clock edge or a reset level.
@@ -477,13 +446,23 @@ function BlockInspector({ block }: { block: RtlBlock }) {
         </div>
       ) : null}
 
+      {isStructuredKind(block.kind) ? (
+        <StructuredBlockSettings block={block} />
+      ) : null}
+
       <h3 className="inspector__subheading">Ports</h3>
-      <div className={`port-table${block.kind === "gate" ? " port-table--no-width" : ""}`}>
+      <div
+        className={`port-table${hidesWidth ? " port-table--no-width" : ""}${
+          hidesTieOff ? " port-table--no-tie" : ""
+        }`}
+      >
         <div className="port-list__header" aria-hidden="true">
           <span>Name</span>
           <span>Side</span>
           <span>Drive</span>
-          {block.kind === "gate" ? null : <span>Width</span>}
+          {hidesWidth ? null : <span>Width</span>}
+          {/* The tie-off buttons sit unlabeled beside the × buttons. */}
+          {hidesTieOff ? null : <span />}
           <span />
         </div>
         <ul className="port-list">
@@ -532,7 +511,11 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                       ? "A clock/reset is always an input"
                       : block.kind === "gate"
                         ? "A gate's output is always \"out\", every other port always \"in\""
-                        : "A register's d is always an input, q always an output"
+                        : block.kind === "codec"
+                          ? "Set by the codec's Type, above"
+                          : block.kind === "mux"
+                            ? "A mux's data and select lines are inputs; its output is \"out\""
+                            : "A register's d is always an input, q always an output"
                   }
                 >
                   {port.direction}
@@ -547,7 +530,18 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                   }
                 />
               )}
-              {block.kind === "gate" ? null : hasFixedWidth(port) ? (
+              {hidesWidth ? null : block.kind === "mux" ? (
+                <span
+                  className="port-row__fixed-value"
+                  title={
+                    port.role === "select"
+                      ? "A select line is always 1 bit"
+                      : "Set by the mux's Data Size, above"
+                  }
+                >
+                  {port.width ?? 1}
+                </span>
+              ) : hasFixedWidth(port) ? (
                 <span
                   className="port-row__fixed-value"
                   title="A clock/reset is always 1 bit"
@@ -567,6 +561,15 @@ function BlockInspector({ block }: { block: RtlBlock }) {
                     })
                   }
                 />
+              )}
+              {hidesTieOff ? null : canTieOff(block.kind, port) ? (
+                <TieOffButton
+                  tiedOff={!!port.tiedOff}
+                  wired={hasWiresOn(wires, block.id, [port.id])}
+                  onToggle={() => toggleTieOff(block.id, port.id)}
+                />
+              ) : (
+                <span aria-hidden="true" />
               )}
               {canRemovePort(port) ? (
                 <button
@@ -660,13 +663,81 @@ function BlockInspector({ block }: { block: RtlBlock }) {
       <ColorPicker
         value={block.color}
         defaultColor={paletteFor(block.kind, theme).stroke}
-        onChange={(color) => updateBlockColor(block.id, color)}
+        swatches={swatchSlots(recentColors)}
+        onChange={(color) => {
+          updateBlockColor(block.id, color);
+          if (color) {
+            recordColor(color);
+          }
+        }}
         onPreviewStart={beginInteraction}
         onPreview={(color) => previewBlockColor(block.id, color)}
+        onPreviewEnd={recordColor}
       />
 
       <DeleteSelectionButton />
     </div>
+  );
+}
+
+/**
+ * One port row's tie-off toggle. Its icon is a port stub ending in an open
+ * circle while the port is in use, and an X where the circle was once it's
+ * tied off — the same X drawn through the port on the canvas. Disabled
+ * while the port has a wire, since a wired port is plainly in use.
+ *
+ * @param props.tiedOff - Whether the port is tied off now.
+ * @param props.wired - Whether any wire touches the port.
+ * @param props.onToggle - Flip the tie-off.
+ * @returns The button.
+ */
+function TieOffButton({
+  tiedOff,
+  wired,
+  onToggle,
+}: {
+  tiedOff: boolean;
+  wired: boolean;
+  onToggle: () => void;
+}) {
+  const title = tiedOff
+    ? "Tied off — click to use this port again"
+    : wired
+      ? "Disconnect its wires to tie it off"
+      : "Tie off (mark this port as unused)";
+  return (
+    <button
+      type="button"
+      className={`port-row__tie${tiedOff ? " is-tied" : ""}`}
+      aria-pressed={tiedOff}
+      aria-label={tiedOff ? "Untie port" : "Tie off port"}
+      title={title}
+      disabled={wired && !tiedOff}
+      onClick={onToggle}
+    >
+      <svg
+        viewBox="0 0 14 14"
+        width="12"
+        height="12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        aria-hidden="true"
+      >
+        {tiedOff ? (
+          <>
+            <path d="M1 7h4.5" />
+            <path d="M6.5 3.5l6 7M12.5 3.5l-6 7" />
+          </>
+        ) : (
+          <>
+            <path d="M1 7h5.5" />
+            <circle cx="9.5" cy="7" r="3" />
+          </>
+        )}
+      </svg>
+    </button>
   );
 }
 

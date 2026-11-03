@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import { useEffect, useRef } from "react";
@@ -21,6 +21,7 @@ import { useDiagramStore } from "./state/diagram-store";
 import { useAutosave } from "./state/use-autosave";
 import { useDiagramCommands } from "./state/use-diagram-commands";
 import { useKeyboardShortcuts } from "./state/use-keyboard-shortcuts";
+import { syncColorHistory } from "./state/color-history-store";
 import {
   activateTabByPath,
   attachTab,
@@ -67,6 +68,9 @@ export default function App() {
     registerTabCanvas(canvasRef.current);
     return () => registerTabCanvas(null);
   }, []);
+
+  // The color swatches follow the project's shared recent-colors history.
+  useEffect(() => syncColorHistory(), []);
 
   // Keep the main process told what this window has open, and answer its
   // two requests: take a tab dragged in from another window, and bring an

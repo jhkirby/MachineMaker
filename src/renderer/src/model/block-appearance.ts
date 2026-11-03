@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-04
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 // Single source of truth for block colors. Kept as literal hex (not CSS vars)
@@ -44,6 +44,8 @@ const PALETTE_BY_THEME: Record<Theme, Record<BlockKind, BlockPalette>> = {
     io: MODULE_BLUE_DARK,
     constant: MODULE_BLUE_DARK,
     gate: MODULE_BLUE_DARK,
+    codec: MODULE_BLUE_DARK,
+    mux: MODULE_BLUE_DARK,
   },
   light: {
     module: MODULE_BLUE_LIGHT,
@@ -51,8 +53,30 @@ const PALETTE_BY_THEME: Record<Theme, Record<BlockKind, BlockPalette>> = {
     io: MODULE_BLUE_LIGHT,
     constant: MODULE_BLUE_LIGHT,
     gate: MODULE_BLUE_LIGHT,
+    codec: MODULE_BLUE_LIGHT,
+    mux: MODULE_BLUE_LIGHT,
   },
 };
+
+/**
+ * The small caption drawn under a block's name — its kind, or the more
+ * specific thing it is where that's chosen per block (a gate's function, a
+ * codec's direction). Shared by the canvas node and the SVG exporter so the
+ * two always agree.
+ *
+ * @param block - The block to caption.
+ * @returns e.g. "module", "XOR", "decoder", "mux".
+ */
+export function blockKindLabel(block: RtlBlock): string {
+  switch (block.kind) {
+    case "gate":
+      return block.gateType ?? "AND";
+    case "codec":
+      return block.codecType ?? "decoder";
+    default:
+      return block.kind;
+  }
+}
 
 /**
  * Shown instead of a block's normal colors while it is being dragged

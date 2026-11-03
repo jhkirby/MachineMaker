@@ -2,19 +2,21 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-01
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import { contextBridge, ipcRenderer } from "electron";
 import { IpcChannel } from "../shared/ipc-contract";
 import type {
   CreateSchematicRequest,
+  DeleteProjectFileRequest,
   DetachTabRequest,
   OpenDocumentsReport,
   TabAttachEvent,
   ExportImageRequest,
   OpenDiagramRequest,
   OpenEditorRequest,
+  RecentColorsEvent,
   RtlBridgeApi,
   SaveDiagramRequest,
   SchematicFileFormat,
@@ -51,6 +53,14 @@ const api: RtlBridgeApi = {
   listRecentProjects: () => ipcRenderer.invoke(IpcChannel.ListRecentProjects),
   removeRecentProject: (path: string) =>
     ipcRenderer.invoke(IpcChannel.RemoveRecentProject, path),
+  deleteProjectFile: (request: DeleteProjectFileRequest) =>
+    ipcRenderer.invoke(IpcChannel.DeleteProjectFile, request),
+  listRecentColors: (projectPath: string | null) =>
+    ipcRenderer.invoke(IpcChannel.ListRecentColors, projectPath),
+  useRecentColor: (projectPath: string | null, color: string) =>
+    ipcRenderer.invoke(IpcChannel.UseRecentColor, projectPath, color),
+  onRecentColorsChange: (callback: (event: RecentColorsEvent) => void) =>
+    subscribe(IpcChannel.RecentColorsChanged, callback),
   getLaunchContext: () => ipcRenderer.invoke(IpcChannel.GetLaunchContext),
   openEditor: (request: OpenEditorRequest) =>
     ipcRenderer.invoke(IpcChannel.OpenEditor, request),

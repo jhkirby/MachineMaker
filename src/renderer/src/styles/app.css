@@ -171,6 +171,19 @@ input[type="number"]::-webkit-outer-spin-button {
   opacity: 0.4;
 }
 
+/* Read-only value standing in for a stepper's input while it's locked —
+   the same footprint as the input, so locking never shifts the buttons. */
+.stepper__fixed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--stepper-digits, 2) * 1ch + var(--space-2) * 2 + 2px);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
 /* Width and Height spread to the panel's full width, so Height's + button
    lines up flush with the right edge of the Name field above. */
 .field--steppers {
@@ -1110,6 +1123,34 @@ input.is-invalid:focus {
   z-index: 2;
 }
 
+/* A tied-off port (RtlPort.tiedOff): a grey X inside the port's own
+   circle. Drawn as two diagonal gradient strokes on the port's background
+   rather than a positioned child, so it's centered by construction and the
+   circle's own border-radius clips each arm exactly at the inner ring.
+   The port is inert — nothing can connect to it — so it takes no pointer
+   events: no hover glow, and a click falls through to the block. */
+.rtl-port.rtl-port--tied {
+  --tie-stroke: 1.4px;
+  pointer-events: none;
+  border-color: var(--text-muted);
+  background:
+    linear-gradient(
+      45deg,
+      transparent calc(50% - var(--tie-stroke) / 2),
+      var(--text-muted) calc(50% - var(--tie-stroke) / 2),
+      var(--text-muted) calc(50% + var(--tie-stroke) / 2),
+      transparent calc(50% + var(--tie-stroke) / 2)
+    ),
+    linear-gradient(
+      -45deg,
+      transparent calc(50% - var(--tie-stroke) / 2),
+      var(--text-muted) calc(50% - var(--tie-stroke) / 2),
+      var(--text-muted) calc(50% + var(--tie-stroke) / 2),
+      transparent calc(50% + var(--tie-stroke) / 2)
+    ),
+    var(--surface-canvas);
+}
+
 /* A light fill on hover, same idea as the block-body lighten below but
    scoped to just the port itself — see the .rtl-block:hover:not(:has(...))
    rule, which turns the block's own lighten off while a port is the thing
@@ -1459,6 +1500,39 @@ input.is-invalid:focus {
   border-color: var(--border-strong);
 }
 
+/* A toggle that can't change right now (a wired codec's Type — see
+   StructuredBlockSettings.tsx) stays readable, current choice and all, but
+   dims and stops reacting so it doesn't look like a control that's broken. */
+.mode-toggle.is-locked {
+  opacity: 0.55;
+}
+
+.mode-toggle__option:disabled {
+  cursor: not-allowed;
+}
+
+.mode-toggle.is-locked .mode-toggle__option:not(.is-active):hover {
+  background: var(--surface-raised);
+}
+
+/* A field whose contents sit centered in the panel (a codec's Size). The
+   stepper otherwise pins itself to the start (.stepper's align-self). */
+.field--centered {
+  align-items: center;
+  text-align: center;
+}
+
+.field--centered .stepper {
+  align-self: center;
+}
+
+/* Short explanation under a field that's locked, saying what unlocks it. */
+.field__note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* Six-way segmented control for a gate's boolean function (setGateType in
    the diagram store) — same look and interaction as .mode-toggle above, just
    a 3-column grid wrapping to two rows instead of one flex row, since six
@@ -1542,10 +1616,33 @@ input.is-invalid:focus {
    underneath, whether or not that scrollbar happens to be showing. */
 .port-list__header {
   display: grid;
-  grid-template-columns: 1fr 70px 48px 50px 22px;
+  grid-template-columns: var(--port-columns);
   gap: var(--space-1);
   margin-bottom: 2px;
-  padding-right: calc(var(--space-2) + var(--scrollbar-size));
+  padding-right: calc(var(--port-list-inset) + var(--scrollbar-size));
+}
+
+/* The table runs on into most of the inspector's right padding, and the
+   tie-off/× buttons are slim, so the Name column — the one that matters
+   most — keeps a readable width even with both buttons on every row.
+   One column template for the header and the rows, varied per kind below. */
+.port-table {
+  --port-list-inset: 2px;
+  --port-columns: 1fr 64px 48px 44px 18px 18px;
+  margin-right: calc(-1 * var(--space-3));
+}
+
+/* A gate's or codec's ports are always exactly 1 bit (normalizeFixedPorts,
+   model/port-layout.ts), so its table drops the Width column rather than
+   showing "1" on every row the way clk/reset do on a module. */
+.port-table--no-width {
+  --port-columns: 1fr 64px 48px 18px 18px;
+}
+
+/* I/O pins and constants never offer a tie-off (canTieOff,
+   diagram-model.ts), so their table drops that slot too. */
+.port-table--no-tie {
+  --port-columns: 1fr 64px 48px 44px 18px;
 }
 
 .port-list__header span {
@@ -1567,7 +1664,7 @@ input.is-invalid:focus {
   list-style: none;
   margin: 0;
   padding: 0;
-  padding-right: var(--space-2);
+  padding-right: var(--port-list-inset);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -1585,18 +1682,36 @@ input.is-invalid:focus {
 
 .port-row {
   display: grid;
-  grid-template-columns: 1fr 70px 48px 50px 22px;
+  grid-template-columns: var(--port-columns);
   gap: var(--space-1);
   align-items: center;
 }
 
-/* A gate's ports are always exactly 1 bit (see normalizeFixedPorts,
-   model/port-layout.ts), so its Ports table drops the Width column
-   entirely rather than showing it fixed to "1" on every row the way
-   clk/reset do on a module or register. */
-.port-table--no-width .port-list__header,
-.port-table--no-width .port-row {
-  grid-template-columns: 1fr 70px 48px 22px;
+/* The tie-off toggle (TieOffButton, InspectorPanel.tsx): muted while the
+   port is in use, the block's own color once it's tied off. */
+.port-row__tie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0;
+  color: var(--text-muted);
+  border-color: var(--border-subtle);
+}
+
+.port-row__tie.is-tied {
+  color: #fff;
+  background: var(--block-stroke, var(--accent));
+  border-color: var(--block-stroke, var(--accent));
+}
+
+.port-row__tie:hover:not(:disabled) {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+.port-row__tie:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* A plain text <input> and a native <select> never share a height at equal
@@ -2075,6 +2190,15 @@ input.is-invalid:focus {
   overflow-wrap: anywhere;
 }
 
+/* Optional line under a popup's title spelling out the consequence. */
+.modal__detail {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
 .modal__input {
   text-align: center;
 }
@@ -2142,6 +2266,11 @@ input.is-invalid:focus {
    option) — raised surface, rounded — but with red text and border to
    mark it as the destructive one. Hover fades in a faint red wash. */
 .inspector__delete {
+  /* Half the panel, centered — a full-width red bar read as louder than a
+     destructive action that still asks for confirmation should be. */
+  width: 50%;
+  align-self: center;
+  margin-inline: auto;
   margin-top: var(--space-2);
   padding: var(--space-1) var(--space-3);
   color: var(--danger);

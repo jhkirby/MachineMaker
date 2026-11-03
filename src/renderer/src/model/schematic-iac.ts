@@ -18,7 +18,10 @@ import {
   GATE_MAX_INPUTS,
   GATE_MIN_INPUTS,
   MAX_BUS_WIDTH,
+  MAX_STRUCTURED_BITS,
   MIN_BUS_WIDTH,
+  MIN_STRUCTURED_BITS,
+  canTieOff,
   formatBusWidth,
   isClockPort,
   isResetPort,
@@ -42,6 +45,7 @@ import {
   normalizeFixedPorts,
   resizeToFitPorts,
 } from "./port-layout";
+import { conformStructuredPorts } from "./structured-ports";
 
 /** The two text formats a schematic can be written in. */
 export type SchematicFormat = "json" | "yaml";
@@ -76,6 +80,20 @@ components:                       # keyed by name; names must be unique
     gate: XOR                     # AND NAND OR NOR XOR XNOR
     inputs: 2                     # a count (named a, b, c…) or a list of names
     rotation: right               # right (default), left, up, down
+    tied: [b]                     # ports deliberately left unconnected
+
+  sel_dec:
+    type: decoder                 # or encoder
+    bits: 2                       # 2-to-4 decoder (encoder: 4-to-2)
+    outputs: [y0, y1, y2, "y3 @bottom"]   # optional: rename / re-side ports
+
+  pick:
+    type: mux
+    bits: 1                       # select lines; 2^bits data inputs
+    width: 32                     # data inputs and output are this wide
+    inputs: [a, b]                # optional names: data inputs,
+    selects: [sel]                #   select lines,
+    output: y                     #   and the output
 
 wires:
   - pc_in -> pc.d                 # single-pin components need no ".port"
@@ -106,6 +124,9 @@ const COMPONENT_TYPES = [
   "module",
   "register",
   "gate",
+  "decoder",
+  "encoder",
+  "mux",
   "input",
   "output",
   "inout",
@@ -290,13 +311,66 @@ function setDataWidth(block: RtlBlock, width: number): void {
   }
 }
 
+/**
+ * A codec's or mux's ports split into the lists its spec names them by —
+ * `inputs`/`outputs` for a codec; `inputs`/`selects`/`output` for a mux —
+ * each in port order.
+ *
+ * @param block - A codec or mux.
+ * @returns [spec key, ports] pairs.
+ */
+function structuredPortLists(block: RtlBlock): [string, RtlPort[]][] {
+  const ins = block.ports.filter((p) => p.direction === "in" && p.role !== "select");
+  const outs = block.ports.filter((p) => p.direction === "out");
+  return block.kind === "mux"
+    ? [
+        ["inputs", ins],
+        ["selects", block.ports.filter((p) => p.role === "select")],
+        ["output", outs],
+      ]
+    : [
+        ["inputs", ins],
+        ["outputs", outs],
+      ];
+}
+
+/**
+ * Apply a spec's names (and any sides) to one group of a codec's or mux's
+ * ports, in order. The group's size is fixed by the component's settings,
+ * so the list must match it exactly; widths come from the settings too and
+ * a width written here is ignored.
+ *
+ * @param ports - The group's ports, in order; mutated.
+ * @param specs - The names/sides the spec gives them.
+ * @param path - The list's location, for errors.
+ */
+function renameStructuredPorts(ports: RtlPort[], specs: PortSpec[], path: string): void {
+  if (specs.length !== ports.length) {
+    throw new SchematicError(
+      path,
+      `expected ${ports.length} name(s) here — the count follows from bits`,
+    );
+  }
+  specs.forEach((spec, index) => {
+    ports[index].name = spec.name;
+    if (spec.side) {
+      ports[index].side = spec.side;
+    }
+  });
+}
+
 // ── COMPONENTS ─────────────────────────────────────────────────────────────
 
 const COMMON_KEYS = ["type", "at", "size", "color"];
+/** Every kind whose ports can be tied off also accepts a `tied` list. */
+const TIEABLE_KEYS = [...COMMON_KEYS, "tied"];
 const KEYS_BY_TYPE: Record<ComponentType, readonly string[]> = {
-  module: [...COMMON_KEYS, "sequential", "inputs", "outputs", "inouts"],
-  register: [...COMMON_KEYS, "width"],
-  gate: [...COMMON_KEYS, "gate", "inputs", "rotation"],
+  module: [...TIEABLE_KEYS, "sequential", "inputs", "outputs", "inouts"],
+  register: [...TIEABLE_KEYS, "width"],
+  gate: [...TIEABLE_KEYS, "gate", "inputs", "rotation"],
+  decoder: [...TIEABLE_KEYS, "bits", "inputs", "outputs"],
+  encoder: [...TIEABLE_KEYS, "bits", "inputs", "outputs"],
+  mux: [...TIEABLE_KEYS, "bits", "width", "inputs", "selects", "output"],
   input: [...COMMON_KEYS, "width"],
   output: [...COMMON_KEYS, "width"],
   inout: [...COMMON_KEYS, "width"],
@@ -328,7 +402,11 @@ function buildComponent(name: string, spec: unknown, path: string): BuiltCompone
   checkKeys(spec, KEYS_BY_TYPE[type], path);
 
   const kind =
-    type === "input" || type === "output" || type === "inout" ? "io" : type;
+    type === "input" || type === "output" || type === "inout"
+      ? "io"
+      : type === "decoder" || type === "encoder"
+        ? "codec"
+        : type;
   const block = createBlock(kind, 0, 0);
   block.label = name;
 
@@ -412,6 +490,37 @@ function buildComponent(name: string, spec: unknown, path: string): BuiltCompone
       }
       break;
     }
+    case "decoder":
+    case "encoder":
+    case "mux": {
+      if (type !== "mux") {
+        block.codecType = type;
+      }
+      if (spec.bits !== undefined) {
+        block.bits = readInteger(
+          spec.bits,
+          MIN_STRUCTURED_BITS,
+          MAX_STRUCTURED_BITS,
+          `${path}.bits`,
+        );
+      }
+      if (type === "mux" && width !== undefined) {
+        block.dataWidth = width;
+      }
+      block.ports = [];
+      conformStructuredPorts(block);
+      for (const [key, ports] of structuredPortLists(block)) {
+        if (spec[key] !== undefined) {
+          renameStructuredPorts(ports, readPortList(spec[key], `${path}.${key}`), `${path}.${key}`);
+        }
+      }
+      const names = block.ports.map((p) => p.name);
+      const duplicate = names.find((n, i) => names.indexOf(n) !== i);
+      if (duplicate !== undefined) {
+        throw new SchematicError(path, `port "${duplicate}" is declared twice`);
+      }
+      break;
+    }
     case "input":
     case "output":
     case "inout": {
@@ -426,6 +535,25 @@ function buildComponent(name: string, spec: unknown, path: string): BuiltCompone
     case "constant":
       setDataWidth(block, width ?? 1);
       break;
+  }
+
+  if (spec.tied !== undefined) {
+    const names = Array.isArray(spec.tied) ? spec.tied : [spec.tied];
+    names.forEach((raw, index) => {
+      const where = `${path}.tied[${index}]`;
+      if (typeof raw !== "string") {
+        throw new SchematicError(where, "expected a port name");
+      }
+      // Matched as plain text: a port's name may hold spaces ("Port 1").
+      const port = block.ports.find((p) => p.name === raw.trim());
+      if (!port) {
+        throw new SchematicError(where, `"${name}" has no port "${String(raw)}"`);
+      }
+      if (!canTieOff(block.kind, port)) {
+        throw new SchematicError(where, `"${port.name}" can't be tied off`);
+      }
+      port.tiedOff = true;
+    });
   }
 
   if (spec.color !== undefined) {
@@ -509,6 +637,14 @@ function buildWire(
   label: string | undefined,
   path: string,
 ): RtlWire {
+  for (const end of [from, to]) {
+    if (end.port.tiedOff) {
+      throw new SchematicError(
+        path,
+        `${end.block.label}.${end.port.name} is tied off, so it can't be wired`,
+      );
+    }
+  }
   if (!directionsCompatible(from.port.direction, to.port.direction)) {
     throw new SchematicError(
       path,
@@ -743,6 +879,33 @@ function blockToSpec(block: RtlBlock): Json {
       }
       break;
     }
+    case "codec":
+    case "mux": {
+      spec.type = block.kind === "mux" ? "mux" : (block.codecType ?? "decoder");
+      spec.bits = block.bits ?? MIN_STRUCTURED_BITS;
+      if (block.kind === "mux" && (block.dataWidth ?? 1) > 1) {
+        spec.width = block.dataWidth;
+      }
+      // Each group is written out only when a port in it was renamed or
+      // moved off its default side — otherwise `bits` already says it all.
+      const fresh = structuredClone(block);
+      fresh.ports = [];
+      conformStructuredPorts(fresh);
+      const defaults = new Map(structuredPortLists(fresh));
+      for (const [key, ports] of structuredPortLists(block)) {
+        const reference = defaults.get(key) ?? [];
+        const customized = ports.some(
+          (p, i) => p.name !== reference[i]?.name || p.side !== reference[i]?.side,
+        );
+        if (customized) {
+          const written = ports.map((p, i) =>
+            p.side !== reference[i]?.side ? `${p.name} @${p.side}` : p.name,
+          );
+          spec[key] = key === "output" ? written[0] : written;
+        }
+      }
+      break;
+    }
     case "io":
       spec.type =
         dataPort?.direction === "out" ? "input" : dataPort?.direction === "in" ? "output" : "inout";
@@ -756,6 +919,11 @@ function blockToSpec(block: RtlBlock): Json {
         spec.width = dataWidth;
       }
       break;
+  }
+
+  const tied = block.ports.filter((p) => p.tiedOff).map((p) => p.name);
+  if (tied.length > 0) {
+    spec.tied = tied;
   }
 
   spec.at = [Math.round(block.x / GRID_SIZE), Math.round(block.y / GRID_SIZE)];
@@ -840,4 +1008,13 @@ export function serializeSchematic(diagram: RtlDiagram, format: SchematicFormat)
 }
 
 /** Keys whose list values are written inline in YAML output. */
-const INLINE_LIST_KEYS = new Set(["at", "size", "inputs", "outputs", "inouts", "to"]);
+const INLINE_LIST_KEYS = new Set([
+  "at",
+  "size",
+  "inputs",
+  "outputs",
+  "inouts",
+  "selects",
+  "tied",
+  "to",
+]);

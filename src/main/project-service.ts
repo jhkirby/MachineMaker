@@ -6,8 +6,8 @@
  * --------------------------------------------------------------------------- */
 
 import { access, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
-import { dialog, type BrowserWindow } from "electron";
+import { basename, dirname, extname, join, resolve } from "node:path";
+import { dialog, shell, type BrowserWindow } from "electron";
 import {
   PROJECT_MANIFEST_FILE,
   PROJECT_SCHEMA_VERSION,
@@ -147,6 +147,49 @@ export class ProjectService {
       schematics,
       stateMachines,
     };
+  }
+
+  /**
+   * Move one of a project's schematics or state machines to the OS trash
+   * (recoverable, unlike an outright unlink). The path comes from the
+   * renderer, so it's checked to be a file sitting directly inside the
+   * project's own schematics/ or state-machines/ folder before anything is
+   * touched — never anywhere else on disk.
+   *
+   * @param projectPath - The project folder.
+   * @param filePath - The file to delete.
+   * @returns The project, reloaded without it.
+   * @throws {Error} If the folder isn't a project, the file lies outside
+   *   those two folders, or it isn't a regular file.
+   */
+  async deleteProjectFile(
+    projectPath: string,
+    filePath: string,
+  ): Promise<ProjectSummary> {
+    await this.readManifest(projectPath);
+    const target = resolve(filePath);
+    const allowedFolders = [PROJECT_SCHEMATICS_DIR, PROJECT_STATE_MACHINES_DIR]
+      .map((folder) => this.comparable(resolve(projectPath, folder)));
+    if (!allowedFolders.includes(this.comparable(dirname(target)))) {
+      throw new Error(`"${basename(target)}" isn't part of this project.`);
+    }
+    const info = await stat(target);
+    if (!info.isFile()) {
+      throw new Error(`"${basename(target)}" isn't a file.`);
+    }
+    await shell.trashItem(target);
+    return this.loadProject(projectPath);
+  }
+
+  /**
+   * A path in the form two paths should be compared in — case-folded on the
+   * case-insensitive filesystems of Windows and macOS.
+   *
+   * @param path - An absolute, resolved path.
+   * @returns Its comparison key.
+   */
+  private comparable(path: string): string {
+    return process.platform === "linux" ? path : path.toLowerCase();
   }
 
   /**

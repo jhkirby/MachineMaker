@@ -2,13 +2,14 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-04
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import { flushSync } from "react-dom";
 import { create } from "zustand";
 import type { Connection } from "@xyflow/react";
 import {
+  canTieOff,
   countedPorts,
   createEmptyDiagram,
   formatBusWidth,
@@ -17,8 +18,13 @@ import {
   moduleDefinitionFromBlock,
   GATE_MAX_INPUTS,
   GATE_MIN_INPUTS,
+  MAX_BUS_WIDTH,
   MAX_PORTS,
+  MAX_STRUCTURED_BITS,
+  MIN_BUS_WIDTH,
+  MIN_STRUCTURED_BITS,
   type BlockKind,
+  type CodecType,
   type GateRotation,
   type GateType,
   type PortDirection,
@@ -38,6 +44,11 @@ import {
   normalizeFixedPorts,
   resizeToFitPorts,
 } from "../model/port-layout";
+import {
+  hasWiresOn,
+  isStructuredKind,
+  portsDroppedBy,
+} from "../model/structured-ports";
 import { nanoid } from "nanoid";
 
 const HISTORY_LIMIT = 50;
@@ -225,9 +236,31 @@ export interface DiagramStore {
   addPort(blockId: string, side: PortSide, direction: PortDirection): void;
   updatePort(blockId: string, portId: string, patch: Partial<RtlPort>): void;
   removePort(blockId: string, portId: string): void;
+  /**
+   * Tie a port off (mark it deliberately unused), or undo that. Only where
+   * canTieOff allows, and refused while the port has a wire — a wired
+   * port is plainly in use.
+   */
+  toggleTieOff(blockId: string, portId: string): void;
   setModuleSequential(blockId: string, sequential: boolean): void;
   setGateType(blockId: string, gateType: GateType): void;
   setGateRotation(blockId: string, gateRotation: GateRotation): void;
+  /**
+   * Switch a codec between encoder and decoder, rebuilding its ports with
+   * default names. Refused while any wire touches the block — the swap
+   * would turn every input into an output and break them.
+   */
+  setCodecType(blockId: string, codecType: CodecType): void;
+  /**
+   * Set a codec's or mux's size (see RtlBlock.bits), adding or removing
+   * ports to match. Refused if it would remove a port that has a wire.
+   */
+  setStructuredBits(blockId: string, bits: number): void;
+  /**
+   * Set the bus width of a mux's data inputs and output. Refused while any
+   * of those ports has a wire, which would be left mismatched.
+   */
+  setMuxDataWidth(blockId: string, dataWidth: number): void;
   /**
    * Make a new module definition from a module block's current name and
    * ports, and link the block to it.
@@ -297,6 +330,19 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
       // mutation rather than trusting each action to remember to, so the
       // invariant can never drift no matter which action touched the ports.
       draft.blocks.forEach(normalizeFixedPorts);
+      // A wire whose port no longer exists (a codec or mux shrunk under it,
+      // say — see conformStructuredPorts) can't be drawn or saved
+      // meaningfully, so it goes with its port wherever that happened.
+      const livePorts = new Set(
+        draft.blocks.flatMap((block) =>
+          block.ports.map((port) => `${block.id}/${port.id}`),
+        ),
+      );
+      draft.wires = draft.wires.filter(
+        (wire) =>
+          livePorts.has(`${wire.sourceBlockId}/${wire.sourcePortId}`) &&
+          livePorts.has(`${wire.targetBlockId}/${wire.targetPortId}`),
+      );
       // A shorter port name or a removed port can shrink a block's floor as
       // well as grow it; normalizeFixedPorts above only ever grows
       // (growToFitPorts), so re-fit each block to its current floor here,
@@ -538,7 +584,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
     addPort: (blockId, side, direction) =>
       commit((draft) => {
         const block = draft.blocks.find((b) => b.id === blockId);
-        if (!block) {
+        // A codec's or mux's ports come only from its settings (see
+        // structured-ports.ts) — one added by hand would just be conformed
+        // straight back out again.
+        if (!block || isStructuredKind(block.kind)) {
           return;
         }
         // A gate's own cap is its input count (GATE_MAX_INPUTS) — much
@@ -597,6 +646,9 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         // from appearing in the first place; this is the same backstop
         // normalizeFixedPorts is for direction/width, just for a mutation
         // that can't be un-done after the fact by re-normalizing.
+        if (isStructuredKind(block.kind)) {
+          return;
+        }
         if (
           block.kind === "gate" &&
           (port.direction !== "in" ||
@@ -612,6 +664,33 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
             !(w.targetBlockId === blockId && w.targetPortId === portId),
         );
       }),
+
+    toggleTieOff: (blockId, portId) => {
+      const { diagram } = get();
+      const block = diagram.blocks.find((b) => b.id === blockId);
+      const port = block?.ports.find((p) => p.id === portId);
+      if (
+        !block ||
+        !port ||
+        !canTieOff(block.kind, port) ||
+        (!port.tiedOff && hasWiresOn(diagram.wires, blockId, [portId]))
+      ) {
+        return;
+      }
+      commit((draft) => {
+        const target = draft.blocks
+          .find((b) => b.id === blockId)
+          ?.ports.find((p) => p.id === portId);
+        if (!target) {
+          return;
+        }
+        if (target.tiedOff) {
+          delete target.tiedOff;
+        } else {
+          target.tiedOff = true;
+        }
+      });
+    },
 
     setModuleSequential: (blockId, sequential) =>
       commit((draft) => {
@@ -680,6 +759,77 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         }
       }),
 
+    setCodecType: (blockId, codecType) => {
+      const { diagram } = get();
+      const current = diagram.blocks.find((b) => b.id === blockId);
+      if (
+        !current ||
+        current.kind !== "codec" ||
+        current.codecType === codecType ||
+        hasWiresOn(diagram.wires, blockId)
+      ) {
+        return;
+      }
+      commit((draft) => {
+        const block = draft.blocks.find((b) => b.id === blockId);
+        if (block) {
+          block.codecType = codecType;
+          // Every port flips direction, so none of the old names (a0 → y0,
+          // say) still describe anything — start the new type fresh;
+          // normalizeFixedPorts (in commit) rebuilds them.
+          block.ports = [];
+        }
+      });
+    },
+
+    setStructuredBits: (blockId, bits) => {
+      const { diagram } = get();
+      const current = diagram.blocks.find((b) => b.id === blockId);
+      if (
+        !current ||
+        !isStructuredKind(current.kind) ||
+        !Number.isInteger(bits) ||
+        bits < MIN_STRUCTURED_BITS ||
+        bits > MAX_STRUCTURED_BITS ||
+        current.bits === bits ||
+        hasWiresOn(diagram.wires, blockId, portsDroppedBy(current, { bits }))
+      ) {
+        return;
+      }
+      commit((draft) => {
+        const block = draft.blocks.find((b) => b.id === blockId);
+        if (block) {
+          block.bits = bits;
+        }
+      });
+    },
+
+    setMuxDataWidth: (blockId, dataWidth) => {
+      const { diagram } = get();
+      const current = diagram.blocks.find((b) => b.id === blockId);
+      const dataPortIds =
+        current?.ports
+          .filter((port) => port.role !== "select")
+          .map((port) => port.id) ?? [];
+      if (
+        !current ||
+        current.kind !== "mux" ||
+        !Number.isInteger(dataWidth) ||
+        dataWidth < MIN_BUS_WIDTH ||
+        dataWidth > MAX_BUS_WIDTH ||
+        current.dataWidth === dataWidth ||
+        hasWiresOn(diagram.wires, blockId, dataPortIds)
+      ) {
+        return;
+      }
+      commit((draft) => {
+        const block = draft.blocks.find((b) => b.id === blockId);
+        if (block) {
+          block.dataWidth = dataWidth;
+        }
+      });
+    },
+
     // The definition is a snapshot: later edits to the block's name or ports
     // don't flow back into it. Where definitions ultimately live (and how
     // "Link Module" picks an existing one) is still to be designed, so for
@@ -731,6 +881,8 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         if (
           !sourcePort ||
           !targetPort ||
+          sourcePort.tiedOff ||
+          targetPort.tiedOff ||
           !directionsCompatible(sourcePort.direction, targetPort.direction)
         ) {
           return;

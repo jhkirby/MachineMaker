@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-04
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 // Translates the persistent RTL model into the node/edge arrays React Flow
@@ -102,6 +102,8 @@ export function resolvePortPairConnection(
   if (
     !portA ||
     !portB ||
+    portA.tiedOff ||
+    portB.tiedOff ||
     !directionsCompatible(portA.direction, portB.direction)
   ) {
     return null;

@@ -16,7 +16,7 @@ export interface DiagramStats {
   links: number;
   /** Physical signal wires: each link counts as its bus width (1 if plain). */
   wires: number;
-  /** Ports, on any block, that no link touches. */
+  /** Ports, on any block, that no link touches and that aren't tied off. */
   emptyPorts: number;
   /** Grid squares covered by all blocks together. */
   area: number;
@@ -34,9 +34,14 @@ export interface DiagramStats {
  */
 export function computeDiagramStats(diagram: RtlDiagram): DiagramStats {
   const portWidth = new Map<string, number>();
+  // A tied-off port is unconnected on purpose, so it isn't "empty".
+  const tiedOff = new Set<string>();
   for (const block of diagram.blocks) {
     for (const port of block.ports) {
       portWidth.set(`${block.id}/${port.id}`, port.width ?? 1);
+      if (port.tiedOff) {
+        tiedOff.add(`${block.id}/${port.id}`);
+      }
     }
   }
 
@@ -59,8 +64,9 @@ export function computeDiagramStats(diagram: RtlDiagram): DiagramStats {
     components: diagram.blocks.length,
     links: diagram.wires.length,
     wires,
-    emptyPorts: [...portWidth.keys()].filter((key) => !connected.has(key))
-      .length,
+    emptyPorts: [...portWidth.keys()].filter(
+      (key) => !connected.has(key) && !tiedOff.has(key),
+    ).length,
     area: Math.round(
       diagram.blocks.reduce(
         (sum, block) => sum + block.width * block.height,

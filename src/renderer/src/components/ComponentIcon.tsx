@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import type { BlockKind } from "../../../shared/diagram-model";
@@ -42,6 +42,21 @@ const GLYPHS: Record<BlockKind, JSX.Element> = {
     <>
       <path d="M4 3h3a5 5 0 0 1 0 10H4z" />
       <path d="M1 6h3M1 10h3M12 8h3" />
+    </>
+  ),
+  // A decoder: a narrow body with few inputs fanning out to many outputs.
+  codec: (
+    <>
+      <rect x="4.5" y="2" width="7" height="12" rx="1" />
+      <path d="M1.5 6.5h3M1.5 9.5h3M11.5 4h3M11.5 6.7h3M11.5 9.3h3M11.5 12h3" />
+    </>
+  ),
+  // A multiplexer: the classic trapezoid, wide input face narrowing to one
+  // output, with its select line entering the bottom.
+  mux: (
+    <>
+      <path d="M4.5 2 11.5 5v6l-7 3z" />
+      <path d="M1.5 5h3M1.5 11h3M11.5 8h3M8 12.5v2.5" />
     </>
   ),
 };

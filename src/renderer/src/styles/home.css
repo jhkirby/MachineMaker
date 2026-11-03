@@ -255,6 +255,18 @@
   transform: translateY(-1px);
 }
 
+/* Destructive action (Delete): red text at rest, and a red rather than
+   accent-blue ring on hover, so it never reads as the safe choice beside
+   Open. It still only opens the type-DELETE popup, never deletes outright. */
+.home-button--danger {
+  color: var(--danger);
+}
+
+.home-button--danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  box-shadow: 0 6px 20px var(--danger-glow);
+}
+
 .home-icon-button {
   display: flex;
   align-items: center;

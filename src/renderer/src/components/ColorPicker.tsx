@@ -11,11 +11,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import {
-  COLOR_SWATCHES,
-  hexToRgb,
-  isValidHexColor,
-} from "../model/block-appearance";
+import { hexToRgb, isValidHexColor } from "../model/block-appearance";
 import { hexToHsv, hsvToHex, rgbToHex, type Hsv } from "../model/color-math";
 import NumericField from "./NumericField";
 
@@ -43,6 +39,10 @@ interface ColorPickerProps {
   onPreviewStart: () => void;
   /** Called with every color a wheel/square drag passes through. */
   onPreview: (color: string) => void;
+  /** Called with the color a wheel/square drag ends on. */
+  onPreviewEnd: (color: string) => void;
+  /** The one-click swatches after the "default" one, in order. */
+  swatches: readonly string[];
 }
 
 /**
@@ -70,6 +70,8 @@ export default function ColorPicker({
   onChange,
   onPreviewStart,
   onPreview,
+  onPreviewEnd,
+  swatches,
 }: ColorPickerProps) {
   const resolved = value ?? defaultColor;
   // Hue/saturation are held here rather than always derived from `resolved`:
@@ -163,6 +165,9 @@ export default function ColorPicker({
   };
 
   const endDrag = () => {
+    if (dragging.current) {
+      onPreviewEnd(hsvToHex(hsv));
+    }
     dragging.current = null;
   };
 
@@ -220,7 +225,7 @@ export default function ColorPicker({
       <div
         className="color-picker__swatches"
         role="group"
-        aria-label="Preset colors"
+        aria-label="Recent and preset colors"
       >
         <button
           type="button"
@@ -231,7 +236,7 @@ export default function ColorPicker({
           aria-label="Use this kind's default color"
           onClick={() => onChange(undefined)}
         />
-        {COLOR_SWATCHES.map((swatch) => (
+        {swatches.map((swatch) => (
           <button
             key={swatch}
             type="button"

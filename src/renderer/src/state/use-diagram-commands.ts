@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 import { useMemo, type RefObject } from "react";
@@ -299,6 +299,8 @@ ${error instanceof Error ? error.message : String(error)}`,
           "place-module": () => togglePlacing("module"),
           "place-register": () => togglePlacing("register"),
           "place-gate": () => togglePlacing("gate"),
+          "place-codec": () => togglePlacing("codec"),
+          "place-mux": () => togglePlacing("mux"),
           "place-io": () => togglePlacing("io"),
           "place-constant": () => togglePlacing("constant"),
           "focus-title": () => {

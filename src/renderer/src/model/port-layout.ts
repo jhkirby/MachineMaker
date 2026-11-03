@@ -11,6 +11,7 @@
 // that limit grows the block.
 
 import {
+  canTieOff,
   isClockPort,
   isResetPort,
   portLabelText,
@@ -20,6 +21,7 @@ import {
   type RtlPort,
 } from "../../../shared/diagram-model";
 import { GRID_SIZE } from "./grid";
+import { conformStructuredPorts, isStructuredKind } from "./structured-ports";
 import { measurePortLabelWidth } from "./text-measure";
 
 /** Smallest block, in grid cells, regardless of how few ports it has. */
@@ -46,6 +48,15 @@ const MODULE_REGISTER_MIN_HEIGHT_CELLS = 8;
  */
 const IO_CONSTANT_MIN_WIDTH_CELLS = 10;
 const IO_CONSTANT_MIN_HEIGHT_CELLS = 4;
+
+/**
+ * Narrowest a codec or multiplexer may be, in grid cells — wide enough that
+ * a left-side and a right-side label (a mux's "d0 [31:0]" opposite its
+ * "y [31:0]", say) never meet across the header in the middle. Their height
+ * needs no floor of its own: it follows from their port count like any
+ * other block's.
+ */
+const STRUCTURED_MIN_WIDTH_CELLS = 10;
 
 /**
  * Extra cells reserved for the header (name + kind label), on top of
@@ -231,6 +242,7 @@ export function minBlockSize(block: RtlBlock): {
     HEADER_MIN_WIDTH_CELLS,
     fixedMinCells ? MODULE_REGISTER_MIN_WIDTH_CELLS : 0,
     isIoOrConstant ? IO_CONSTANT_MIN_WIDTH_CELLS : 0,
+    isStructuredKind(block.kind) ? STRUCTURED_MIN_WIDTH_CELLS : 0,
     // The trailing term isn't the usual flat "+1": every port's label is
     // centered on its dot and sized to use up to half its own pitch cell on
     // each side (portPitchCells' whole point), but the *last* port on a side
@@ -458,6 +470,17 @@ export function gateSidesFor(
 }
 
 export function normalizeFixedPorts(block: RtlBlock): void {
+  // A codec's or mux's port count, directions and widths all follow from its
+  // settings — see structured-ports.ts. Conformed first so everything below
+  // (and the sizing/centering passes after this) sees the final port list.
+  conformStructuredPorts(block);
+  // A tie-off is only valid where canTieOff allows — a port renamed to
+  // "clk", or one on a kind that never offers it, loses it here.
+  for (const port of block.ports) {
+    if (port.tiedOff && !canTieOff(block.kind, port)) {
+      delete port.tiedOff;
+    }
+  }
   // An I/O port's or constant's single port is left/right only — see
   // availableSides in InspectorPanel.tsx, which is what stops a diagram
   // author from ever choosing top/bottom in the first place. This is the

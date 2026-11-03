@@ -2,7 +2,7 @@
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
  * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
- * Last Modified: 2026-09-02
+ * Last Modified: 2026-11-02
  * --------------------------------------------------------------------------- */
 
 // Contract shared by the preload bridge and the main-process handlers. Keeping
@@ -31,6 +31,11 @@ export const IpcChannel = {
   LoadProject: "project:load",
   ListRecentProjects: "project:list-recents",
   RemoveRecentProject: "project:remove-recent",
+  DeleteProjectFile: "project:delete-file",
+  ListRecentColors: "colors:list-recent",
+  UseRecentColor: "colors:use",
+  /** Main → every window push: a project's recent colors changed. */
+  RecentColorsChanged: "colors:recent-changed",
   GetLaunchContext: "app:get-launch-context",
   OpenEditor: "app:open-editor",
   ReturnHome: "app:return-home",
@@ -148,6 +153,25 @@ export interface CreateSchematicRequest {
   diagram?: RtlDiagram;
 }
 
+/** Request payload for {@link IpcChannel.DeleteProjectFile}. */
+export interface DeleteProjectFileRequest {
+  /** The project the file belongs to. */
+  projectPath: string;
+  /**
+   * The schematic or state machine to delete — must sit directly inside
+   * that project's schematics/ or state-machines/ folder.
+   */
+  filePath: string;
+}
+
+/** Payload of {@link IpcChannel.RecentColorsChanged}. */
+export interface RecentColorsEvent {
+  /** Whose history changed; null for the loose (no-project) one. */
+  projectPath: string | null;
+  /** The new history, newest first. */
+  colors: string[];
+}
+
 /** Request payload for {@link IpcChannel.OpenEditor}. */
 export interface OpenEditorRequest {
   projectPath: string | null;
@@ -212,6 +236,22 @@ export interface RtlBridgeApi {
   /** Recent projects, newest first, with ones that no longer exist dropped. */
   listRecentProjects(): Promise<RecentProject[]>;
   removeRecentProject(path: string): Promise<RecentProject[]>;
+  /**
+   * Move one of a project's schematics or state machines to the OS trash.
+   * Refused (rejects) while the file is open in an editor window.
+   *
+   * @returns The project, reloaded without it.
+   */
+  deleteProjectFile(req: DeleteProjectFileRequest): Promise<ProjectSummary>;
+  /** Recently used block colors for a project (null: no project), newest first. */
+  listRecentColors(projectPath: string | null): Promise<string[]>;
+  /**
+   * Record a block color as just used. Every window is told the new
+   * history through {@link RtlBridgeApi.onRecentColorsChange}.
+   */
+  useRecentColor(projectPath: string | null, color: string): Promise<string[]>;
+  /** Subscribe to any window's change to a recent-colors history. */
+  onRecentColorsChange(callback: (event: RecentColorsEvent) => void): () => void;
 
   /** What this window was opened to show. */
   getLaunchContext(): Promise<LaunchContext>;

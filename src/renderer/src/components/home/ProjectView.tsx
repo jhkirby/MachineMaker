@@ -9,7 +9,28 @@ import { useMemo, useState } from "react";
 import type { ProjectSummary } from "../../../../shared/project-model";
 import { computeDiagramStats } from "../../model/diagram-stats";
 import { relativeTime, sumDiagramStats } from "../../model/project-stats";
+import ProjectFileSection, { type ProjectFileItem } from "./ProjectFileSection";
 import StatsPanel from "./StatsPanel";
+
+/** Row icon for a schematic: a small block with pins. */
+const SCHEMATIC_GLYPH = (
+  <svg viewBox="0 0 16 16" width="14" height="14">
+    <rect x="4" y="4" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M1.5 6h2.5M1.5 10h2.5M12 8h2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
+/** Row icon for a state machine: two states joined by a transition. */
+const STATE_MACHINE_GLYPH = (
+  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+    <circle cx="4" cy="10" r="2.5" />
+    <circle cx="12" cy="6" r="2.5" />
+    <path d="M6.2 8.8 9.8 7.2" />
+  </svg>
+);
+
+/** What kind of project file a delete request is for. */
+export type ProjectFileKind = "schematic" | "state machine";
 
 /** Props for {@link ProjectView}. */
 interface ProjectViewProps {
@@ -19,13 +40,17 @@ interface ProjectViewProps {
   onNewSchematic: () => void;
   /** Open these schematics in the editor. */
   onOpenSchematic: (path: string) => void;
+  /** Ask to delete a schematic or state machine — confirmed by the caller. */
+  onDeleteFile: (kind: ProjectFileKind, item: ProjectFileItem) => void;
 }
 
 /**
  * One project's page: its schematics and state machines on the left, and on
  * the right a stats panel of project-wide totals, plus a second one for the
  * schematic currently selected in the list. Click selects a schematic;
- * double-click (or Open) takes it into the editor.
+ * double-click (or Open) takes it into the editor, and Delete asks to
+ * remove it. State machines list the same way, though they can't be
+ * opened until their editor exists.
  *
  * @param props - See {@link ProjectViewProps}.
  * @returns The project view.
@@ -36,11 +61,36 @@ export default function ProjectView({
   onBack,
   onNewSchematic,
   onOpenSchematic,
+  onDeleteFile,
 }: ProjectViewProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(
     project.schematics[0]?.path ?? null,
   );
+  const [selectedMachinePath, setSelectedMachinePath] = useState<string | null>(
+    project.stateMachines[0]?.path ?? null,
+  );
   const selected = project.schematics.find((s) => s.path === selectedPath) ?? null;
+
+  const schematicItems = useMemo<ProjectFileItem[]>(
+    () =>
+      project.schematics.map((schematic) => ({
+        path: schematic.path,
+        name: schematic.diagram.title,
+        meta: `${schematic.diagram.blocks.length} components · edited ${relativeTime(
+          schematic.modifiedAt,
+        )}`,
+      })),
+    [project],
+  );
+  const machineItems = useMemo<ProjectFileItem[]>(
+    () =>
+      project.stateMachines.map((machine) => ({
+        path: machine.path,
+        name: machine.name,
+        meta: "Editor coming soon",
+      })),
+    [project],
+  );
 
   const totals = useMemo(
     () => sumDiagramStats(project.schematics.map((s) => s.diagram)),
@@ -76,96 +126,37 @@ export default function ProjectView({
 
       <div className="project-view__body">
         <div className="project-view__lists">
-          <section className="home-card" aria-label="Schematics">
-            <div className="home-card__header">
-              <p className="home-card__eyebrow">
-                Schematics <span className="home-card__count">{project.schematics.length}</span>
-              </p>
-              <div className="home-card__header-actions">
-                <button
-                  type="button"
-                  className="home-button home-button--small"
-                  disabled={!selected || busy}
-                  onClick={() => selected && onOpenSchematic(selected.path)}
-                >
-                  Open
-                </button>
-                <button
-                  type="button"
-                  className="home-button home-button--small home-button--primary"
-                  disabled={busy}
-                  onClick={onNewSchematic}
-                >
-                  New Schematic
-                </button>
-              </div>
-            </div>
-            {project.schematics.length === 0 ? (
-              <p className="landing__empty">
-                No schematics yet — create one to start drawing.
-              </p>
-            ) : (
-              <ul className="item-list" role="listbox" aria-label="Schematics">
-                {project.schematics.map((schematic) => {
-                  const isSelected = schematic.path === selectedPath;
-                  return (
-                    <li
-                      key={schematic.path}
-                      role="option"
-                      aria-selected={isSelected}
-                      className={`item-list__row${isSelected ? " is-selected" : ""}`}
-                      onClick={() => setSelectedPath(schematic.path)}
-                      onDoubleClick={() => !busy && onOpenSchematic(schematic.path)}
-                      title="Double-click to open"
-                    >
-                      <span className="item-list__glyph" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" width="14" height="14">
-                          <rect x="4" y="4" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-                          <path d="M1.5 6h2.5M1.5 10h2.5M12 8h2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-                        </svg>
-                      </span>
-                      <span className="item-list__name">{schematic.diagram.title}</span>
-                      <span className="item-list__meta">
-                        {schematic.diagram.blocks.length} components · edited{" "}
-                        {relativeTime(schematic.modifiedAt)}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          <section className="home-card" aria-label="State machines">
-            <div className="home-card__header">
-              <p className="home-card__eyebrow">
-                State Machines{" "}
-                <span className="home-card__count">{project.stateMachines.length}</span>
-              </p>
-              <button
-                type="button"
-                className="home-button home-button--small"
-                disabled
-                title="The state machine editor isn't available yet"
-              >
-                New State Machine
-              </button>
-            </div>
-            {project.stateMachines.length === 0 ? (
-              <p className="landing__empty">
-                State machine editing is coming soon.
-              </p>
-            ) : (
-              <ul className="item-list">
-                {project.stateMachines.map((machine) => (
-                  <li key={machine.path} className="item-list__row is-disabled">
-                    <span className="item-list__name">{machine.name}</span>
-                    <span className="item-list__meta">Editor coming soon</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <ProjectFileSection
+            label="Schematics"
+            items={schematicItems}
+            glyph={SCHEMATIC_GLYPH}
+            emptyText="No schematics yet — create one to start drawing."
+            selectedPath={selectedPath}
+            onSelect={setSelectedPath}
+            busy={busy}
+            onOpen={onOpenSchematic}
+            onDelete={(item) => onDeleteFile("schematic", item)}
+            newLabel="New Schematic"
+            onNew={onNewSchematic}
+            newEnabled
+          />
+          <ProjectFileSection
+            label="State Machines"
+            items={machineItems}
+            glyph={STATE_MACHINE_GLYPH}
+            emptyText="State machine editing is coming soon."
+            selectedPath={selectedMachinePath}
+            onSelect={setSelectedMachinePath}
+            busy={busy}
+            // Placeholder: there's no state machine editor to open into yet.
+            onOpen={() => undefined}
+            openTitle="The state machine editor isn't available yet"
+            onDelete={(item) => onDeleteFile("state machine", item)}
+            newLabel="New State Machine"
+            onNew={() => undefined}
+            newEnabled={false}
+            newTitle="The state machine editor isn't available yet"
+          />
         </div>
 
         <aside className="project-view__stats">
