@@ -1636,9 +1636,46 @@ input.is-invalid:focus {
   overflow-wrap: anywhere;
 }
 
+/* One selected component (or wire): its facts, then its ports. Sections
+   are split by a rule; within one, nothing separates the facts from the
+   ports. */
+.sim-inspector__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sim-inspector__section + .sim-inspector__section {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* A component section's header: its name, large and in the component's
+   own color (set inline), with its kind beside it. */
+.sim-inspector__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.sim-inspector__name {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-inspector__kind {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .sim-inspector__ports {
   list-style: none;
-  margin: 0;
+  margin: var(--space-1) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -1781,10 +1818,6 @@ input.is-invalid:focus {
   color: var(--text-muted);
 }
 
-/* The second heading in the simulate-mode sidebar, below the outputs. */
-.inspector__heading--spaced {
-  margin-top: var(--space-5);
-}
 
 .signal-row__value {
   min-width: 0;

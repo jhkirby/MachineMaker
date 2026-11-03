@@ -88,19 +88,22 @@ export default function InspectorPanel() {
       className={`inspector${open ? " inspector--open" : ""}`}
       aria-hidden={!open}
     >
-      {/* Simulate mode: the outputs first, then a plain read-only summary
-          of the selection (no controls — nothing can be edited). */}
+      {/* Simulate mode: the schematic's outputs — or, once something is
+          selected, a read-only section per selected component with the
+          live value on each of its ports (no controls; nothing can be
+          edited). */}
       {simulating ? (
-        <>
-          <h2 className="inspector__heading">Outputs</h2>
-          <OutputPanel />
-          {hasSelection ? (
-            <>
-              <h2 className="inspector__heading inspector__heading--spaced">Inspector</h2>
-              <SimulationInspector block={block} wire={wire} />
-            </>
-          ) : null}
-        </>
+        hasSelection ? (
+          <>
+            <h2 className="inspector__heading">Inspector</h2>
+            <SimulationInspector />
+          </>
+        ) : (
+          <>
+            <h2 className="inspector__heading">Outputs</h2>
+            <OutputPanel />
+          </>
+        )
       ) : (
         <h2 className="inspector__heading">Inspector</h2>
       )}
