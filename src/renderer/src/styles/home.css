@@ -1,0 +1,571 @@
+/* -----------------------------------------------------------------------------
+ * Project:       MachineMaker
+ * Owner:         Joshua H. Kirby
+ * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+ * Last Modified: 2026-11-02
+ * --------------------------------------------------------------------------- */
+
+/* ── HOME SHELL ───────────────────────────────────────────────────────────── */
+
+.home {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* The stage behind everything: a deep radial gradient (lighter toward the
+   middle, where the hero sits) under the animated circuit board. */
+.home__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: radial-gradient(
+    ellipse at 50% 40%,
+    var(--home-backdrop-inner),
+    var(--home-backdrop-outer) 75%
+  );
+}
+
+/* Scrolls on its own above the fixed backdrop, so a long project list
+   never drags the circuit board along with it. */
+.home__content {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+
+.home__theme-toggle {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 2;
+}
+
+.home__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  max-width: 720px;
+  margin: 0 auto var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-primary);
+  background: var(--danger-glow);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+}
+
+.home__error-dismiss {
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: inherit;
+}
+
+/* ── CIRCUIT BACKDROP ─────────────────────────────────────────────────────── */
+
+.circuit-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.circuit-backdrop__trace {
+  fill: none;
+  stroke: var(--home-trace);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+/* A short bright dash travelling along each trace toward its via: the dash
+   is 40 long with a gap longer than any trace, so only one shows per pass,
+   and dashoffset sweeps it from the trace's start to its end. */
+.circuit-backdrop__pulse {
+  fill: none;
+  stroke: var(--home-pulse);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 40 1400;
+  stroke-dashoffset: 40;
+  filter: drop-shadow(0 0 4px var(--home-pulse));
+  animation: circuit-pulse 5s linear infinite;
+}
+
+@keyframes circuit-pulse {
+  from {
+    stroke-dashoffset: 40;
+  }
+  to {
+    stroke-dashoffset: -600;
+  }
+}
+
+.circuit-backdrop__via {
+  fill: var(--home-backdrop-outer);
+  stroke: var(--home-trace);
+  stroke-width: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .circuit-backdrop__pulse {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ── LANDING ──────────────────────────────────────────────────────────────── */
+
+.landing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  max-width: 640px;
+  margin: 0 auto;
+  padding-top: 6vh;
+  animation: home-rise 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+/* The logo sits in a softly glowing halo that slowly breathes. */
+.landing__logo-ring {
+  display: grid;
+  place-items: center;
+  width: 132px;
+  height: 132px;
+  margin-bottom: var(--space-2);
+  border-radius: 36px;
+  box-shadow: 0 0 60px 6px var(--home-glow);
+  animation: logo-breathe 4s ease-in-out infinite;
+}
+
+.landing__logo {
+  width: 112px;
+  height: 112px;
+  -webkit-user-drag: none;
+}
+
+@keyframes logo-breathe {
+  50% {
+    box-shadow: 0 0 80px 14px var(--home-glow);
+  }
+}
+
+.landing__title {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(
+    120deg,
+    var(--home-title-from) 30%,
+    var(--home-title-to)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.landing__actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.landing__recents {
+  align-self: stretch;
+}
+
+.landing__empty {
+  margin: 0;
+  padding: var(--space-3) 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@keyframes home-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing,
+  .project-view,
+  .landing__logo-ring {
+    animation: none;
+  }
+}
+
+/* ── HOME BUTTONS ─────────────────────────────────────────────────────────── */
+
+.home-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--home-card);
+  border: 1px solid var(--home-card-border);
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.home-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: 0 6px 20px var(--home-glow);
+}
+
+.home-button--primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.home-button--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.home-button--small {
+  padding: var(--space-1) var(--space-3);
+  font-size: 12px;
+}
+
+.home-button--small:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+/* Destructive action (Delete): red text at rest, and a red rather than
+   accent-blue ring on hover, so it never reads as the safe choice beside
+   Open. It still only opens the type-DELETE popup, never deletes outright. */
+.home-button--danger {
+  color: var(--danger);
+}
+
+.home-button--danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  box-shadow: 0 6px 20px var(--danger-glow);
+}
+
+.home-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  color: var(--text-primary);
+  background: var(--home-card);
+  border: 1px solid var(--home-card-border);
+  border-radius: 50%;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.home-icon-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--hover-highlight);
+}
+
+/* ── CARDS & LISTS ────────────────────────────────────────────────────────── */
+
+/* Frosted panels floating over the circuit board. */
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--home-card);
+  border: 1px solid var(--home-card-border);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+.home-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.home-card__header-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.home-card__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.home-card__count {
+  margin-left: var(--space-1);
+  padding: 0 6px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.recent-list,
+.item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recent-list__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Name over path on the left, time on the right; the whole row is the
+   button. */
+.recent-list__open {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name time"
+    "path time";
+  column-gap: var(--space-3);
+  padding: var(--space-2) 40px var(--space-2) var(--space-3);
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.recent-list__open:hover:not(:disabled) {
+  background: var(--accent-glow);
+  border-color: var(--home-card-border);
+}
+
+.recent-list__name {
+  grid-area: name;
+  font-weight: 600;
+}
+
+.recent-list__path {
+  grid-area: path;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.recent-list__time {
+  grid-area: time;
+  align-self: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Shown on row hover only, like a tab's close button. */
+.recent-list__forget {
+  position: absolute;
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  opacity: 0;
+  transition:
+    opacity 150ms ease,
+    background-color 150ms ease;
+}
+
+.recent-list__row:hover .recent-list__forget {
+  opacity: 1;
+}
+
+.recent-list__forget:hover {
+  color: var(--text-primary);
+  background: var(--hover-highlight);
+}
+
+.item-list__row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.item-list__row:hover {
+  background: var(--accent-glow);
+}
+
+.item-list__row.is-selected {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+.item-list__row.is-disabled {
+  grid-template-columns: 1fr auto;
+  cursor: default;
+  opacity: 0.6;
+}
+
+.item-list__row.is-disabled:hover {
+  background: transparent;
+}
+
+.item-list__glyph {
+  display: flex;
+  color: var(--accent);
+}
+
+.item-list__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.item-list__meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── PROJECT PAGE ─────────────────────────────────────────────────────────── */
+
+.project-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 1100px;
+  margin: 0 auto;
+  animation: home-rise 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.project-view__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  /* Clear of the absolutely-placed theme toggle in the corner. */
+  padding-right: 48px;
+}
+
+.project-view__heading {
+  min-width: 0;
+}
+
+.project-view__name {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  background: linear-gradient(
+    120deg,
+    var(--home-title-from) 40%,
+    var(--home-title-to)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.project-view__path {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.project-view__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.project-view__lists,
+.project-view__stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── STATS PANEL ──────────────────────────────────────────────────────────── */
+
+.stats-panel__name {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 16px;
+}
+
+.stats-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+}
+
+.stats-panel__tile {
+  padding: var(--space-2) var(--space-3);
+  background: var(--accent-glow);
+  border-radius: 8px;
+}
+
+.stats-panel__tile dt {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.stats-panel__tile dd {
+  margin: 2px 0 0;
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}

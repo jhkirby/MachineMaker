@@ -1,0 +1,29 @@
+# electron-builder packaging config. The install scripts (scripts/install.ps1,
+# scripts/install.sh) package with `--dir` — an unpacked app folder — and copy
+# it into place themselves, so no installer, code signing, or release
+# publishing is involved. See docs/INSTALL.md.
+appId: com.joshuakirby.machinemaker
+productName: MachineMaker
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+# Ships everything inside an ASAR archive; the app reads no files of its own
+# at runtime besides those bundled into out/.
+asar: true
+win:
+  target: nsis
+  icon: build/icon.png
+mac:
+  target: dmg
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+  # Built locally from source for the user's own machine: no Developer ID to
+  # sign with. The install script clears the quarantine flag instead.
+  identity: null
+linux:
+  target: AppImage
+  icon: build/icon.png
+  category: Development

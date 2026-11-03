@@ -1,0 +1,169 @@
+/* -----------------------------------------------------------------------------
+ * Project:       MachineMaker
+ * Owner:         Joshua H. Kirby
+ * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+ * Last Modified: 2026-11-02
+ * --------------------------------------------------------------------------- */
+
+/* ── EDITOR TABS ──────────────────────────────────────────────────────────── */
+
+/* The tab strip (TabBar.tsx), living inside the custom titlebar. The bar as
+   a whole is a window drag region; the strip opts out so tabs take clicks,
+   and the empty titlebar space to its right still drags the window. */
+.tab-bar {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.tab-bar__home {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.tab-bar__home:hover {
+  color: var(--text-primary);
+  background: var(--hover-highlight);
+}
+
+.tab-bar__tabs {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* Tabs share the strip evenly and shrink together once eight are open,
+   rather than overflowing into a scroller. The explicit width (not just a
+   flex-basis) matters: Chromium sizes the strip from its tabs' widths, and
+   ignores flex-basis there, which collapsed every tab to its label. */
+.tab-bar__tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 1 180px;
+  width: 180px;
+  min-width: 72px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  color: var(--text-muted);
+  border-right: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.tab-bar__tab:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+/* The active tab joins the toolbar below it: same panel color, an accent
+   line along its top edge, and its bottom border cut away. */
+.tab-bar__tab.is-active {
+  color: var(--text-primary);
+  background: var(--surface-panel);
+  margin-bottom: -1px;
+}
+
+.tab-bar__tab.is-active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+.tab-bar__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+/* A small dot while the active document has edits not yet autosaved. */
+.tab-bar__dirty {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Hidden until its own tab is hovered (opacity, not display, so the label
+   doesn't reflow as it appears). */
+.tab-bar__close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  opacity: 0;
+  transition:
+    opacity 150ms ease,
+    background-color 150ms ease;
+}
+
+.tab-bar__tab:hover .tab-bar__close {
+  opacity: 1;
+}
+
+.tab-bar__close:hover {
+  color: var(--text-primary);
+  background: var(--hover-highlight);
+}
+
+/* ── TAB DRAGGING ─────────────────────────────────────────────────────────── */
+
+/* The tab under the pointer during a drag (TabBar.tsx): lifted above its
+   neighbors and following the pointer, with no transition so it doesn't
+   lag behind it. touch-action keeps a touch/pen drag from scrolling. */
+.tab-bar__tab {
+  touch-action: none;
+}
+
+.tab-bar__tab.is-dragging {
+  z-index: 3;
+  transition: none;
+  cursor: grabbing;
+  background: var(--surface-panel);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* Torn off the strip: floats freely at the pointer as a card, signalling it
+   will open in its own window (or join another window's strip) on release.
+   Fixed-positioned, so it's drawn over the toolbar and canvas below. */
+.tab-bar__tab.is-torn-off {
+  z-index: 1000;
+  height: var(--titlebar-height);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  opacity: 0.92;
+}
+
+.tab-bar__tab.is-torn-off::before {
+  display: none;
+}
