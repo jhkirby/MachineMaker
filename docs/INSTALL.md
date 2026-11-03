@@ -14,19 +14,19 @@ MachineMaker installs by building itself from source on your machine. The same o
 **Windows** (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/joshuakirby/MachineMaker/prod/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/jhkirby/MachineMaker/prod/scripts/install.ps1 | iex
 ```
 
 **macOS:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joshuakirby/MachineMaker/prod/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jhkirby/MachineMaker/prod/scripts/install.sh | bash
 ```
 
 **Linux:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/joshuakirby/MachineMaker/prod/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jhkirby/MachineMaker/prod/scripts/install.sh | bash
 ```
 
 The first run takes a few minutes: it downloads dependencies and the Electron runtime. Updates are faster, because dependencies are cached in the build folder.
@@ -55,14 +55,14 @@ Set these before running the command:
 | Variable | Default | Use |
 |---|---|---|
 | `MACHINEMAKER_BRANCH` | `prod` | Install a different branch, e.g. `qa` to try a release candidate. |
-| `MACHINEMAKER_REPO` | `https://github.com/joshuakirby/MachineMaker.git` | Install from a fork, or from a local clone path. |
+| `MACHINEMAKER_REPO` | `https://github.com/jhkirby/MachineMaker.git` | Install from a fork, or from a local clone path. |
 
 ```powershell
-$env:MACHINEMAKER_BRANCH = "qa"; irm https://raw.githubusercontent.com/joshuakirby/MachineMaker/prod/scripts/install.ps1 | iex
+$env:MACHINEMAKER_BRANCH = "qa"; irm https://raw.githubusercontent.com/jhkirby/MachineMaker/prod/scripts/install.ps1 | iex
 ```
 
 ```bash
-MACHINEMAKER_BRANCH=qa bash -c "$(curl -fsSL https://raw.githubusercontent.com/joshuakirby/MachineMaker/prod/scripts/install.sh)"
+MACHINEMAKER_BRANCH=qa bash -c "$(curl -fsSL https://raw.githubusercontent.com/jhkirby/MachineMaker/prod/scripts/install.sh)"
 ```
 
 > **Private repository?** The `raw.githubusercontent.com` URLs only work while the repository is public. For a private repo, clone it with your own credentials and run the script from the clone: `pwsh scripts/install.ps1` or `bash scripts/install.sh`. The script's own `git clone` uses your normal Git credentials.

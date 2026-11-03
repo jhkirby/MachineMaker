@@ -7,9 +7,9 @@
 
 # MachineMaker
 
-[![CI](https://github.com/joshuakirby/MachineMaker/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/joshuakirby/MachineMaker/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/joshuakirby/MachineMaker/actions/workflows/codeql.yml/badge.svg?branch=dev)](https://github.com/joshuakirby/MachineMaker/actions/workflows/codeql.yml)
-[![SBOM](https://github.com/joshuakirby/MachineMaker/actions/workflows/sbom.yml/badge.svg)](https://github.com/joshuakirby/MachineMaker/actions/workflows/sbom.yml)
+[![CI](https://github.com/jhkirby/MachineMaker/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/jhkirby/MachineMaker/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/jhkirby/MachineMaker/actions/workflows/codeql.yml/badge.svg?branch=dev)](https://github.com/jhkirby/MachineMaker/actions/workflows/codeql.yml)
+[![SBOM](https://github.com/jhkirby/MachineMaker/actions/workflows/sbom.yml/badge.svg)](https://github.com/jhkirby/MachineMaker/actions/workflows/sbom.yml)
 
 A desktop editor for hand-authoring RTL block diagrams: modules, registers, logic gates, I/O and the wires between their ports, organized into projects. It runs on Windows, macOS and Linux, and is built with Electron, React, TypeScript and [React Flow](https://reactflow.dev).
 
@@ -30,12 +30,12 @@ One command installs, and the same command updates:
 
 ```powershell
 # Windows
-irm https://raw.githubusercontent.com/joshuakirby/MachineMaker/prod/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/jhkirby/MachineMaker/prod/scripts/install.ps1 | iex
 ```
 
 ```bash
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/joshuakirby/MachineMaker/prod/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jhkirby/MachineMaker/prod/scripts/install.sh | bash
 ```
 
 Requirements, install locations, options and uninstalling are covered in [docs/INSTALL.md](docs/INSTALL.md).

@@ -9,7 +9,7 @@
 # The same command does both: the first run clones and installs, every later
 # run pulls the latest commit of the branch and reinstalls over the top.
 #
-#   irm https://raw.githubusercontent.com/joshuakirby/MachineMaker/prod/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/jhkirby/MachineMaker/prod/scripts/install.ps1 | iex
 #
 # Layout (all per-user, no admin rights needed):
 #   %LOCALAPPDATA%\MachineMaker\source     git checkout the build runs from
@@ -28,7 +28,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$Repo = if ($env:MACHINEMAKER_REPO) { $env:MACHINEMAKER_REPO } else { "https://github.com/joshuakirby/MachineMaker.git" }
+$Repo = if ($env:MACHINEMAKER_REPO) { $env:MACHINEMAKER_REPO } else { "https://github.com/jhkirby/MachineMaker.git" }
 $Branch = if ($env:MACHINEMAKER_BRANCH) { $env:MACHINEMAKER_BRANCH } else { "prod" }
 $Root = Join-Path $env:LOCALAPPDATA "MachineMaker"
 $Source = Join-Path $Root "source"

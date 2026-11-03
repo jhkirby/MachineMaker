@@ -10,7 +10,7 @@
 # source. The same command does both: the first run clones and installs,
 # every later run pulls the latest commit of the branch and reinstalls.
 #
-#   curl -fsSL https://raw.githubusercontent.com/joshuakirby/MachineMaker/prod/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/jhkirby/MachineMaker/prod/scripts/install.sh | bash
 #
 # Layout (per-user, no root needed except the one Linux sandbox step below):
 #   ~/.machinemaker/source                git checkout the build runs from
@@ -25,7 +25,7 @@
 
 set -euo pipefail
 
-REPO="${MACHINEMAKER_REPO:-https://github.com/joshuakirby/MachineMaker.git}"
+REPO="${MACHINEMAKER_REPO:-https://github.com/jhkirby/MachineMaker.git}"
 BRANCH="${MACHINEMAKER_BRANCH:-prod}"
 ROOT="$HOME/.machinemaker"
 SOURCE="$ROOT/source"
