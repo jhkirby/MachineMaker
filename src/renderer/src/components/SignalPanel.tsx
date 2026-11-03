@@ -75,9 +75,10 @@ function SignalRow({ input }: { input: SignalInput }) {
 
 /**
  * The left panel's contents in Simulate mode: a search box over the
- * schematic's top-level inputs, one row per input to drive a value onto,
- * and — when the schematic has anything clocked (a register or a
- * sequential module) — a Strobe Clock button that advances it one edge.
+ * schematic's top-level inputs (clock and reset pins excluded), one row per
+ * input to drive a value onto, and — when the schematic has anything
+ * clocked (a register or a sequential module) — Reset and Clock buttons,
+ * with the cycle count beneath.
  *
  * @returns The panel body.
  */
@@ -86,6 +87,7 @@ export default function SignalPanel() {
   const filePath = useDiagramStore((s) => s.filePath);
   const cycle = useSimulationStore((s) => s.cycles.get(filePath ?? "") ?? 0);
   const strobeClock = useSimulationStore((s) => s.strobeClock);
+  const resetRegisters = useSimulationStore((s) => s.resetRegisters);
   const [query, setQuery] = useState("");
 
   const inputs = useMemo(() => signalInputs(diagram), [diagram]);
@@ -117,14 +119,24 @@ export default function SignalPanel() {
 
       {clocked ? (
         <div className="signal-panel__clock">
-          <button
-            type="button"
-            className="signal-panel__strobe"
-            title="Advance every register and sequential module one clock edge"
-            onClick={strobeClock}
-          >
-            Strobe Clock
-          </button>
+          <div className="signal-panel__clock-buttons">
+            <button
+              type="button"
+              className="signal-panel__strobe"
+              title="Advance every register and sequential module one clock edge"
+              onClick={strobeClock}
+            >
+              Clock
+            </button>
+            <button
+              type="button"
+              className="signal-panel__reset"
+              title="Reset every register to 0 (and the cycle count)"
+              onClick={resetRegisters}
+            >
+              Reset
+            </button>
+          </div>
           <span className="signal-panel__cycle">Cycle {cycle}</span>
         </div>
       ) : null}

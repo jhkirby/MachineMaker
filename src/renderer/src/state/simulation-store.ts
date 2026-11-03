@@ -43,6 +43,11 @@ interface SimulationState {
   /** Strobe the clock once: every register takes its next state. */
   strobeClock(): void;
   /**
+   * Assert reset: every register in the live document back to 0, and its
+   * cycle count with them. Input values are kept.
+   */
+  resetRegisters(): void;
+  /**
    * Start a fresh run of the live document: its registers and cycle back
    * to 0. Input values are kept.
    */
@@ -91,6 +96,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       cycles: new Map(cycles).set(key, (cycles.get(key) ?? 0) + 1),
     });
   },
+  resetRegisters: () => get().reset(),
   reset: () => {
     // Only this document's registers go: their paths all start with one of
     // its own block ids.

@@ -39,6 +39,16 @@ export type BlockKind =
 export type CodecType = "encoder" | "decoder";
 
 /**
+ * What an `"io"` block's pin is for — chosen from the Type toggle in the
+ * inspector. Omitted means a standard signal. A clock or reset pin is
+ * always a 1-bit input (see normalizeFixedPorts), isn't driven by hand while
+ * simulating (the Clock and Reset buttons stand in for it), and is never
+ * part of a linked module's interface — the parent module's own clk/reset
+ * feed it instead.
+ */
+export type IoRole = "clock" | "reset";
+
+/**
  * Smallest and largest {@link RtlBlock.bits} a codec or multiplexer may
  * declare. The ceiling keeps the widest of them (a 4-to-16 decoder, or a
  * 16:1 mux with 4 selects and 1 output) comfortably under {@link MAX_PORTS}.
@@ -293,6 +303,11 @@ export interface RtlBlock {
    * follow from it — see model/structured-ports.ts.
    */
   bits?: number;
+  /**
+   * Clock or reset, for an `"io"` block whose pin is one (see
+   * {@link IoRole}). Omitted on a standard I/O pin and every other kind.
+   */
+  ioRole?: IoRole;
   /**
    * Bus width of a `"mux"` block's data inputs and output (its selects
    * stay 1 bit). Always set on a mux; omitted on every other kind.

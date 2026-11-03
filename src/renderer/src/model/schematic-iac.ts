@@ -59,6 +59,7 @@ schematic: Fetch Stage            # the diagram's title
 
 components:                       # keyed by name; names must be unique
   pc_in:  { type: input, width: 32 }        # top-level pins: input / output / inout
+  clk:    { type: input, role: clock }      # role: standard (default), clock, reset
   next_pc: { type: output, width: 32 }
   four:   { type: constant, width: 32 }
 
@@ -372,7 +373,7 @@ const KEYS_BY_TYPE: Record<ComponentType, readonly string[]> = {
   decoder: [...TIEABLE_KEYS, "bits", "inputs", "outputs"],
   encoder: [...TIEABLE_KEYS, "bits", "inputs", "outputs"],
   mux: [...TIEABLE_KEYS, "bits", "width", "inputs", "selects", "output"],
-  input: [...COMMON_KEYS, "width"],
+  input: [...COMMON_KEYS, "width", "role"],
   output: [...COMMON_KEYS, "width"],
   inout: [...COMMON_KEYS, "width"],
   constant: [...COMMON_KEYS, "width"],
@@ -543,6 +544,14 @@ function buildComponent(name: string, spec: unknown, path: string): BuiltCompone
       pin.direction = type === "input" ? "out" : type === "output" ? "in" : "inout";
       pin.side = type === "output" ? "left" : "right";
       setDataWidth(block, width ?? 1);
+      // An input can be a clock or reset pin (always 1 bit) instead of a
+      // standard signal.
+      if (spec.role !== undefined) {
+        const role = readOneOf(spec.role, ["standard", "clock", "reset"] as const, `${path}.role`);
+        if (role !== "standard") {
+          block.ioRole = role;
+        }
+      }
       break;
     }
     case "constant":
@@ -927,6 +936,9 @@ function blockToSpec(block: RtlBlock): Json {
         dataPort?.direction === "out" ? "input" : dataPort?.direction === "in" ? "output" : "inout";
       if (dataWidth > 1) {
         spec.width = dataWidth;
+      }
+      if (block.ioRole) {
+        spec.role = block.ioRole;
       }
       break;
     case "constant":

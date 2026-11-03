@@ -493,6 +493,15 @@ export function normalizeFixedPorts(block: RtlBlock): void {
     if (port && port.side !== "left" && port.side !== "right") {
       port.side = "right";
     }
+    // A clock or reset pin is always a plain 1-bit input to the design —
+    // a pin driving "out" of its I/O block (see IoRole).
+    if (port && block.kind === "io" && block.ioRole) {
+      port.direction = "out";
+      port.width = undefined;
+    }
+  }
+  if (block.kind !== "io") {
+    delete block.ioRole;
   }
   // A gate has exactly one output and any number of inputs, and — unlike a
   // module, where direction is a free choice per port — that shape is a data

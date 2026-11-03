@@ -12,16 +12,19 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { hexToRgb, isValidHexColor } from "../model/block-appearance";
-import { hexToHsv, hsvToHex, rgbToHex, type Hsv } from "../model/color-math";
+import {
+  hexToHsv,
+  hsvToHex,
+  rgbToHex,
+  snapToWheel,
+  type Hsv,
+} from "../model/color-math";
 import NumericField from "./NumericField";
 
 /** Outer diameter of the hue ring, in CSS pixels. */
 const WHEEL_SIZE = 168;
 /** Thickness of the hue ring. */
 const RING_WIDTH = 16;
-/** Side of the saturation/value square: the largest square that fits inside
- *  the ring's hole with a little breathing room (side = diameter / √2). */
-const SQUARE_SIZE = Math.floor(((WHEEL_SIZE - 2 * RING_WIDTH - 12) / Math.SQRT2));
 
 /** Props for {@link ColorPicker}. */
 interface ColorPickerProps {
@@ -34,30 +37,22 @@ interface ColorPickerProps {
   /** Called with a new `#rrggbb` color, or undefined to clear back to the
    *  kind default — one undo step each. */
   onChange: (color: string | undefined) => void;
-  /** Called once when a wheel/square drag starts, before any
-   *  {@link onPreview}, so the whole drag can collapse into one undo step. */
+  /** Called once when a ring drag starts, before any {@link onPreview},
+   *  so the whole drag can collapse into one undo step. */
   onPreviewStart: () => void;
-  /** Called with every color a wheel/square drag passes through. */
+  /** Called with every color a ring drag passes through. */
   onPreview: (color: string) => void;
-  /** Called with the color a wheel/square drag ends on. */
+  /** Called with the color a ring drag ends on. */
   onPreviewEnd: (color: string) => void;
   /** The one-click swatches after the "default" one, in order. */
   swatches: readonly string[];
 }
 
 /**
- * Clamp a number into [0, 1].
- *
- * @param value - The number to clamp.
- * @returns `value`, limited to 0-1.
- */
-function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value));
-}
-
-/**
- * A block's Color section: a hue wheel around a saturation/value square,
- * a row of preset swatches, and hex + R/G/B fields for exact values. Every
+ * A block's Color section: a hue ring of fully saturated, full-brightness
+ * colors, a row of recent/preset swatches, and hex + R/G/B fields for exact
+ * values. A typed value is snapped to the nearest color on the ring, so the
+ * fields and the ring always agree. Every
  * control reads from and writes to the same color, so changing any one moves
  * all the others.
  *
@@ -74,15 +69,13 @@ export default function ColorPicker({
   swatches,
 }: ColorPickerProps) {
   const resolved = value ?? defaultColor;
-  // Hue/saturation are held here rather than always derived from `resolved`:
-  // a grey has no hue and black has no saturation either, so deriving them
-  // would snap the ring/square thumbs back to red/left the moment a drag
-  // passes through one.
+  // Hue is held here rather than always derived from `resolved`: a grey
+  // has no hue, so deriving it would snap the ring's thumb back to red the
+  // moment a color passes through one.
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(resolved));
   const [hexDraft, setHexDraft] = useState(resolved.slice(1));
   const wheelRef = useRef<HTMLDivElement>(null);
-  const squareRef = useRef<HTMLDivElement>(null);
-  const dragging = useRef<"wheel" | "square" | null>(null);
+  const dragging = useRef(false);
 
   // Follow a color set from outside (a swatch, the hex/RGB fields, undo) —
   // unless it's the one this picker's own HSV already produces, which is
@@ -97,69 +90,78 @@ export default function ColorPicker({
   const [r, g, b] = hexToRgb(resolved);
   const hexInvalid = !isValidHexColor(`#${hexDraft}`);
 
-  /** Commit a valid hex draft, or snap back to the last real color. */
+  // Bumped on every typed commit, to remount the R/G/B fields: when a typed
+  // value snaps back to the color already showing, nothing else changes to
+  // make them drop what was typed.
+  const [entryNonce, setEntryNonce] = useState(0);
+
+  /**
+   * Apply a typed color, snapped to the nearest one the ring can produce
+   * (see snapToWheel) — so the Hex and R/G/B fields only ever hold a color
+   * that's a point on the ring.
+   *
+   * @param typed - The color as typed.
+   */
+  const commitTyped = (typed: string) => {
+    const snapped = snapToWheel(typed, hsv.h);
+    setEntryNonce((n) => n + 1);
+    setHexDraft(snapped.slice(1));
+    if (snapped !== resolved.toLowerCase()) {
+      onChange(snapped);
+    }
+  };
+
+  /** Commit a valid hex draft (snapped to the ring), or snap back. */
   const commitHex = () => {
     if (!hexInvalid) {
-      onChange(`#${hexDraft.toLowerCase()}`);
+      commitTyped(`#${hexDraft.toLowerCase()}`);
     } else {
       setHexDraft(resolved.slice(1));
     }
   };
 
   /**
-   * Turn a pointer position into a new color for whichever control is being
-   * dragged, and preview it.
+   * Turn a pointer position on the ring into a new hue, and preview it.
    *
    * @param event - The pointer event carrying the position.
    */
   const dragTo = (event: ReactPointerEvent) => {
-    let next: Hsv | null = null;
-    if (dragging.current === "wheel" && wheelRef.current) {
-      const box = wheelRef.current.getBoundingClientRect();
-      const dx = event.clientX - (box.left + box.width / 2);
-      const dy = event.clientY - (box.top + box.height / 2);
-      // 0° at the top, increasing clockwise — the direction the ring's
-      // conic-gradient is painted in (app.css, COLOR PICKER).
-      const h = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
-      next = { ...hsv, h };
-    } else if (dragging.current === "square" && squareRef.current) {
-      const box = squareRef.current.getBoundingClientRect();
-      next = {
-        ...hsv,
-        s: clamp01((event.clientX - box.left) / box.width),
-        v: 1 - clamp01((event.clientY - box.top) / box.height),
-      };
+    if (!dragging.current || !wheelRef.current) {
+      return;
     }
-    if (next) {
-      setHsv(next);
-      onPreview(hsvToHex(next));
-    }
+    const box = wheelRef.current.getBoundingClientRect();
+    const dx = event.clientX - (box.left + box.width / 2);
+    const dy = event.clientY - (box.top + box.height / 2);
+    // 0° at the top, increasing clockwise — the direction the ring's
+    // conic-gradient is painted in (app.css, COLOR PICKER).
+    const h = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
+    // The ring makes only full-strength hues — the same set typed colors
+    // are snapped into (see commitTyped).
+    const next: Hsv = { h, s: 1, v: 1 };
+    setHsv(next);
+    onPreview(hsvToHex(next));
   };
 
   /**
-   * Start dragging one of the two controls.
+   * Start a ring drag — only from the ring itself, not its empty middle
+   * or the box's corners outside it.
    *
-   * @param target - Which control was pressed.
-   * @returns The pointerdown handler for that control.
+   * @param event - The pointerdown.
    */
-  const startDrag = (target: "wheel" | "square") => (event: ReactPointerEvent) => {
-    // The square sits inside the wheel's box; without this a press on the
-    // square would also start a hue drag on the wheel underneath it.
-    event.stopPropagation();
-    if (target === "wheel" && wheelRef.current) {
-      // Only the ring itself picks a hue — not the empty gap between the
-      // ring and the square, or the box's corners outside the ring.
-      const box = wheelRef.current.getBoundingClientRect();
-      const distance = Math.hypot(
-        event.clientX - (box.left + box.width / 2),
-        event.clientY - (box.top + box.height / 2),
-      );
-      if (distance < WHEEL_SIZE / 2 - RING_WIDTH - 4 || distance > WHEEL_SIZE / 2 + 2) {
-        return;
-      }
+  const startDrag = (event: ReactPointerEvent) => {
+    if (!wheelRef.current) {
+      return;
+    }
+    const box = wheelRef.current.getBoundingClientRect();
+    const distance = Math.hypot(
+      event.clientX - (box.left + box.width / 2),
+      event.clientY - (box.top + box.height / 2),
+    );
+    if (distance < WHEEL_SIZE / 2 - RING_WIDTH - 4 || distance > WHEEL_SIZE / 2 + 2) {
+      return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
-    dragging.current = target;
+    dragging.current = true;
     onPreviewStart();
     dragTo(event);
   };
@@ -168,7 +170,7 @@ export default function ColorPicker({
     if (dragging.current) {
       onPreviewEnd(hsvToHex(hsv));
     }
-    dragging.current = null;
+    dragging.current = false;
   };
 
   const hueAngle = (hsv.h * Math.PI) / 180;
@@ -184,7 +186,7 @@ export default function ColorPicker({
           height: WHEEL_SIZE,
           ["--ring-width" as string]: `${RING_WIDTH}px`,
         }}
-        onPointerDown={startDrag("wheel")}
+        onPointerDown={startDrag}
         onPointerMove={dragTo}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
@@ -198,28 +200,6 @@ export default function ColorPicker({
           }}
           aria-hidden="true"
         />
-        <div
-          ref={squareRef}
-          className="color-picker__square"
-          role="slider"
-          aria-label="Saturation and brightness"
-          aria-valuetext={resolved}
-          style={{
-            width: SQUARE_SIZE,
-            height: SQUARE_SIZE,
-            ["--hue-color" as string]: hsvToHex({ h: hsv.h, s: 1, v: 1 }),
-          }}
-          onPointerDown={startDrag("square")}
-          onPointerMove={dragTo}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-        >
-          <span
-            className="color-picker__thumb"
-            style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%` }}
-            aria-hidden="true"
-          />
-        </div>
       </div>
 
       <div
@@ -252,11 +232,6 @@ export default function ColorPicker({
       </div>
 
       <div className="color-picker__controls">
-        <span
-          className="color-picker__preview"
-          style={{ background: resolved }}
-          aria-hidden="true"
-        />
         <label className="color-picker__field">
           <span>Hex</span>
           {/* The "#" is drawn beside the input rather than typed into it,
@@ -304,7 +279,7 @@ export default function ColorPicker({
             ["B", b, (next: number) => rgbToHex(r, g, next)],
           ] as const
         ).map(([label, channel, withChannel]) => (
-          <label key={label} className="color-picker__field">
+          <label key={`${label}-${entryNonce}`} className="color-picker__field">
             <span>{label}</span>
             <NumericField
               className="color-picker__channel"
@@ -312,7 +287,7 @@ export default function ColorPicker({
               max={255}
               value={channel}
               ariaLabel={`${label} channel`}
-              onCommit={(next) => onChange(withChannel(next))}
+              onCommit={(next) => commitTyped(withChannel(next))}
             />
           </label>
         ))}

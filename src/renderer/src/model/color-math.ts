@@ -82,3 +82,20 @@ export function hsvToHex({ h, s, v }: Hsv): string {
   ][sector] ?? [0, 0, 0];
   return rgbToHex((r + m) * 255, (g + m) * 255, (b + m) * 255);
 }
+
+/**
+ * The closest color the hue ring can produce — the ring only makes fully
+ * saturated, full-brightness hues — to any color. The largest channel goes
+ * to 255 and the smallest to 0, with the middle one scaled so the hue stays
+ * the same: the nearest point on the ring, at the same angle. A grey has no
+ * hue at all, so it goes to the ring's current hue instead.
+ *
+ * @param hex - Any `#rrggbb` color.
+ * @param fallbackHue - The hue, in degrees, to use for a grey.
+ * @returns The nearest `#rrggbb` color on the ring.
+ */
+export function snapToWheel(hex: string, fallbackHue: number): string {
+  const { h, s, v } = hexToHsv(hex);
+  const hueless = s === 0 || v === 0;
+  return hsvToHex({ h: hueless ? fallbackHue : h, s: 1, v: 1 });
+}

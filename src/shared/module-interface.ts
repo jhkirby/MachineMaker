@@ -47,7 +47,8 @@ function isClockOrResetName(name: string): boolean {
 /**
  * The interface a schematic presents when a module links to it: one port
  * per I/O component (named after it, facing the way it feeds the design,
- * as wide as its pin), minus any named clk or reset.
+ * as wide as its pin), minus clock and reset pins (by type, or by the name
+ * clk/reset) — those come from the parent module's Mode instead.
  *
  * @param diagram - The linked schematic.
  * @param path - Its project-relative path, recorded on the definition.
@@ -60,7 +61,7 @@ export function moduleInterfaceOf(
   const ports: ModulePortDefinition[] = [];
   for (const block of diagram.blocks) {
     const pin = block.ports[0];
-    if (block.kind !== "io" || !pin || isClockOrResetName(block.label)) {
+    if (block.kind !== "io" || !pin || block.ioRole || isClockOrResetName(block.label)) {
       continue;
     }
     ports.push({

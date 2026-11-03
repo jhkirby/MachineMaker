@@ -18,6 +18,7 @@ import {
   portDirectionSummary,
   type GateRotation,
   type GateType,
+  type IoRole,
   type PortDirection,
   type PortSide,
   type RtlBlock,
@@ -49,6 +50,11 @@ const SIDES: PortSide[] = ["left", "right", "top", "bottom"];
 const DIRECTIONS: PortDirection[] = ["in", "out", "inout"];
 const GATE_TYPES: GateType[] = ["AND", "NAND", "OR", "NOR", "XOR", "XNOR"];
 const GATE_ROTATIONS: GateRotation[] = ["right", "left", "up", "down"];
+const IO_ROLES: readonly { value: IoRole | undefined; label: string }[] = [
+  { value: undefined, label: "Standard" },
+  { value: "clock", label: "Clock" },
+  { value: "reset", label: "Reset" },
+];
 
 /** Largest width/height, in grid cells, the size fields accept. Also sets
  *  how wide those fields are drawn: just enough for this many digits. */
@@ -166,6 +172,7 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   const setModuleSequential = useDiagramStore((s) => s.setModuleSequential);
   const setGateType = useDiagramStore((s) => s.setGateType);
   const setGateRotation = useDiagramStore((s) => s.setGateRotation);
+  const setIoRole = useDiagramStore((s) => s.setIoRole);
   const recentColors = useColorHistoryStore((s) => s.recent);
   const recordColor = useColorHistoryStore((s) => s.use);
 
@@ -181,8 +188,9 @@ function BlockInspector({ block }: { block: RtlBlock }) {
   // direction, and width all key off this (see canRemovePort, below, for
   // the separate — broader — rule on the remove button).
   const isClockOrReset = (port: RtlPort): boolean =>
-    (block.kind === "module" || block.kind === "register") &&
-    (isClockPort(port) || isResetPort(port));
+    ((block.kind === "module" || block.kind === "register") &&
+      (isClockPort(port) || isResetPort(port))) ||
+    (block.kind === "io" && !!block.ioRole);
 
   // The side selector would otherwise let you pick a side that just snaps
   // back on the next render, so it's replaced with plain text instead of
@@ -400,6 +408,32 @@ function BlockInspector({ block }: { block: RtlBlock }) {
           </span>
         </label>
       </div>
+
+      {block.kind === "io" ? (
+        <div className="field">
+          <span>Type</span>
+          <div className="mode-toggle" role="group" aria-label="I/O type">
+            {IO_ROLES.map(({ value, label }) => (
+              <button
+                key={label}
+                type="button"
+                className={`mode-toggle__option${
+                  block.ioRole === value ? " is-active" : ""
+                }`}
+                aria-pressed={block.ioRole === value}
+                title={
+                  value
+                    ? `A ${value} pin: always a 1-bit input`
+                    : "An ordinary signal"
+                }
+                onClick={() => setIoRole(block.id, value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {block.kind === "module" ? (
         <div className="field">

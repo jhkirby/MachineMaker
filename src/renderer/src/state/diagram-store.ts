@@ -26,6 +26,7 @@ import {
   type CodecType,
   type GateRotation,
   type GateType,
+  type IoRole,
   type ModuleDefinition,
   type PortDirection,
   type PortSide,
@@ -265,6 +266,11 @@ export interface DiagramStore {
   setModuleSequential(blockId: string, sequential: boolean): void;
   setGateType(blockId: string, gateType: GateType): void;
   setGateRotation(blockId: string, gateRotation: GateRotation): void;
+  /**
+   * Make an I/O pin a standard signal (undefined), a clock or a reset. A
+   * clock/reset pin is forced to a 1-bit input (normalizeFixedPorts).
+   */
+  setIoRole(blockId: string, role: IoRole | undefined): void;
   /**
    * Switch a codec between encoder and decoder, rebuilding its ports with
    * default names. Refused while any wire touches the block — the swap
@@ -829,6 +835,18 @@ export const useDiagramStore = create<DiagramStore>((set, get) => {
         const block = draft.blocks.find((b) => b.id === blockId);
         if (block && block.kind === "gate") {
           block.gateRotation = gateRotation;
+        }
+      }),
+
+    setIoRole: (blockId, role) =>
+      commit((draft) => {
+        const block = draft.blocks.find((b) => b.id === blockId);
+        if (block && block.kind === "io") {
+          if (role) {
+            block.ioRole = role;
+          } else {
+            delete block.ioRole;
+          }
         }
       }),
 

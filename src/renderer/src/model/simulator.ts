@@ -15,7 +15,8 @@
 //
 // Semantics, per kind:
 //   io        an input pin drives the value set for it; an output pin
-//             shows what's wired into it.
+//             shows what's wired into it. A clock pin reads 0 and a reset
+//             pin 1 (inactive) — the Clock and Reset buttons act instead.
 //   constant  drives 0 (constants have no value field yet).
 //   gate      bitwise AND/NAND/OR/NOR/XOR/XNOR of its 1-bit inputs.
 //   codec     decoder: one-hot output at the index its inputs spell
@@ -127,13 +128,29 @@ export class CircuitSimulator {
    * @returns Every top-level port's value.
    */
   evaluate(inputs: ReadonlyMap<string, bigint>, state: RegisterState): SimulationResult {
+    return { ports: this.settle(this.root, this.rootPins(inputs), state, "", 0).values };
+  }
+
+  /**
+   * What drives the top-level schematic's input pins: the values set for
+   * standard ones; a clock pin idles at 0 and a reset pin at 1 (reset is
+   * active-low), since the Clock and Reset buttons do their work directly.
+   *
+   * @param inputs - Values set for standard input pins.
+   * @returns Pin values by I/O block id.
+   */
+  private rootPins(inputs: ReadonlyMap<string, bigint>): Map<string, SignalValue> {
     const pins = new Map<string, SignalValue>();
     for (const block of this.root.blocks) {
-      if (block.kind === "io" && block.ports[0]?.direction !== "in") {
-        pins.set(block.id, inputs.get(block.id) ?? 0n);
+      if (block.kind !== "io" || block.ports[0]?.direction === "in") {
+        continue;
       }
+      pins.set(
+        block.id,
+        block.ioRole === "clock" ? 0n : block.ioRole === "reset" ? 1n : (inputs.get(block.id) ?? 0n),
+      );
     }
-    return { ports: this.settle(this.root, pins, state, "", 0).values };
+    return pins;
   }
 
   /**
@@ -146,13 +163,7 @@ export class CircuitSimulator {
    * @returns Register contents after it.
    */
   clock(inputs: ReadonlyMap<string, bigint>, state: RegisterState): Map<string, bigint> {
-    const pins = new Map<string, SignalValue>();
-    for (const block of this.root.blocks) {
-      if (block.kind === "io" && block.ports[0]?.direction !== "in") {
-        pins.set(block.id, inputs.get(block.id) ?? 0n);
-      }
-    }
-    const { registers } = this.settle(this.root, pins, state, "", 0);
+    const { registers } = this.settle(this.root, this.rootPins(inputs), state, "", 0);
     const next = new Map(state);
     for (const [path, { d, reset }] of registers) {
       if (reset) {
@@ -376,9 +387,10 @@ export class CircuitSimulator {
         continue;
       }
       const named = { name: io.label } as RtlPort;
-      const source = isClockPort(named)
+      const source =
+        io.ioRole === "clock" || (!io.ioRole && isClockPort(named))
         ? clk
-        : isResetPort(named)
+        : io.ioRole === "reset" || (!io.ioRole && isResetPort(named))
           ? reset
           : block.ports.find((p) => p.direction !== "out" && p.sourceId === io.id);
       pins.set(io.id, read(source));

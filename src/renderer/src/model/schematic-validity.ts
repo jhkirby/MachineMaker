@@ -124,7 +124,8 @@ export function countUnlinkedModules(
 
 /**
  * Whether a schematic can be simulated: it must be valid
- * ({@link checkSchematic}), and every module must be linked — a simulator
+ * ({@link checkSchematic}); if it has sequential components it needs a
+ * clock pin and a reset pin; and every module must be linked — a simulator
  * can't guess what an unlinked module does inside.
  *
  * @param diagram - The schematic to check.
@@ -137,6 +138,22 @@ export function checkSimulationReady(
   const problems = checkSchematic(diagram, lookup).valid
     ? []
     : ["The schematic isn't valid yet (see Valid Schematic)."];
+  // Anything clocked needs a clock pin and a reset pin to run from.
+  const clocked = diagram.blocks.some(
+    (block) =>
+      block.kind === "register" ||
+      (block.kind === "module" && block.ports.some(isClockPort)),
+  );
+  if (clocked) {
+    const has = (role: "clock" | "reset") =>
+      diagram.blocks.some((block) => block.kind === "io" && block.ioRole === role);
+    if (!has("clock")) {
+      problems.push("Has sequential components, so needs an I/O port of type Clock.");
+    }
+    if (!has("reset")) {
+      problems.push("Has sequential components, so needs an I/O port of type Reset.");
+    }
+  }
   const unlinked = countUnlinkedModules(diagram, lookup);
   if (unlinked > 0) {
     problems.push(

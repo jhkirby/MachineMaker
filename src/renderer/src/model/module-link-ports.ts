@@ -12,6 +12,8 @@
 import { nanoid } from "nanoid";
 import {
   createEmptyDiagram,
+  isClockPort,
+  type IoRole,
   type ModuleDefinition,
   type PortDirection,
   type PortSide,
@@ -139,8 +141,10 @@ const OUTPUT_COLUMN_CELLS = 32;
  * A new schematic for "Create Module": one I/O component per port of the
  * module (named after it, as wide as it), inputs stacked down the left,
  * outputs down the right, inouts along the bottom — so linking the module
- * to it afterwards matches every port and keeps every wire. clk and reset
- * are never pins (the parent's Mode toggle owns them), so they get none.
+ * to it afterwards matches every port and keeps every wire. A sequential
+ * module's clk and reset aren't interface ports (the parent's Mode toggle
+ * owns them), but its schematic's registers need them, so it gets a clock
+ * pin and a reset pin (IoRole) that the parent's clk/reset will feed.
  *
  * @param block - The module the schematic is for.
  * @param title - The new schematic's title.
@@ -149,7 +153,12 @@ const OUTPUT_COLUMN_CELLS = 32;
 export function schematicForModule(block: RtlBlock, title: string): RtlDiagram {
   const diagram = createEmptyDiagram(title);
   const rows: Record<"left" | "right" | "bottom", number> = { left: 0, right: 0, bottom: 0 };
-  const place = (name: string, direction: PortDirection, width: number | undefined) => {
+  const place = (
+    name: string,
+    direction: PortDirection,
+    width: number | undefined,
+    role?: IoRole,
+  ) => {
     // An I/O pin is named from the design's side, the reverse of the
     // module port it stands for: a module input is a pin driving *out*.
     const pinDirection: PortDirection =
@@ -172,9 +181,16 @@ export function schematicForModule(block: RtlBlock, title: string): RtlDiagram {
     pin.direction = pinDirection;
     pin.side = pinDirection === "in" ? "left" : "right";
     pin.width = (width ?? 1) > 1 ? width : undefined;
+    if (role) {
+      io.ioRole = role;
+    }
     diagram.blocks.push(io);
   };
 
+  if (block.ports.some(isClockPort)) {
+    place("clk", "in", undefined, "clock");
+    place("reset", "in", undefined, "reset");
+  }
   for (const port of linkablePorts(block)) {
     place(port.name, port.direction, port.width);
   }

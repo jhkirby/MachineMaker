@@ -1742,10 +1742,22 @@ input.is-invalid:focus {
   box-shadow: none;
 }
 
+/* Clock and Reset side by side, the cycle count centred beneath them. */
 .signal-panel__clock {
   display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: var(--space-3);
+}
+
+.signal-panel__clock-buttons {
+  display: flex;
   gap: var(--space-2);
+  width: 100%;
+}
+
+.signal-panel__reset {
+  flex: 1;
 }
 
 .signal-panel__strobe {
@@ -2254,16 +2266,6 @@ input.is-invalid:focus {
   gap: var(--space-2);
 }
 
-/* The current color, as a plain chip — the wheel above is now the visual
-   picker, so this is just a readout next to the numbers. */
-.color-picker__preview {
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-}
-
 /* A small caption over each of Hex / R / G / B, the same pattern .field
    uses for the inspector's other labelled inputs. */
 .color-picker__field {
@@ -2357,23 +2359,8 @@ input.is-invalid:focus {
   cursor: pointer;
 }
 
-/* White-to-hue left to right (saturation), then a black fade over it from
-   the bottom (value). --hue-color is the ring's current hue at full
-   saturation and brightness, set inline by the component. */
-.color-picker__square {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  border-radius: 4px;
-  background:
-    linear-gradient(to top, #000, transparent),
-    linear-gradient(to right, #fff, var(--hue-color));
-  cursor: crosshair;
-}
-
-/* The drag handle on both the ring and the square: a hollow white circle
-   with a faint dark edge so it stays visible over light and dark colors. */
+/* The ring's drag handle: a hollow white circle with a faint dark edge so
+   it stays visible over light and dark colors. */
 .color-picker__thumb {
   position: absolute;
   width: 14px;

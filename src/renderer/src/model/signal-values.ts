@@ -96,7 +96,8 @@ export function parseSignalValue(text: string, width: number): bigint | null {
 
 /**
  * The schematic's top-level inputs — every I/O block whose pin drives into
- * the design (bidirectional ones too), in the schematic's own order.
+ * the design (bidirectional ones too), in the schematic's own order —
+ * except clock and reset pins, which the Clock and Reset buttons drive.
  *
  * @param diagram - The schematic.
  * @returns Its inputs.
@@ -106,6 +107,7 @@ export function signalInputs(diagram: RtlDiagram): SignalInput[] {
     .filter(
       (block) =>
         block.kind === "io" &&
+        !block.ioRole &&
         (block.ports[0]?.direction === "out" || block.ports[0]?.direction === "inout"),
     )
     .map((block) => ({

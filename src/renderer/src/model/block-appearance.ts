@@ -73,6 +73,8 @@ export function blockKindLabel(block: RtlBlock): string {
       return block.gateType ?? "AND";
     case "codec":
       return block.codecType ?? "decoder";
+    case "io":
+      return block.ioRole ?? "io";
     case "module":
       // A linked module is captioned with what it is: its schematic.
       return block.linkedModule?.path ? block.linkedModule.name : "module";
