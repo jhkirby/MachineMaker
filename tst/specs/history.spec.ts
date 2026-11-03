@@ -1,7 +1,7 @@
 /* -----------------------------------------------------------------------------
  * Project:       MachineMaker
  * Owner:         Joshua H. Kirby
- * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+ * Copyright:     Copyright (c) 2026 Joshua H. Kirby. Licensed under the MIT License (see LICENSE).
  * Last Modified: 2026-09-04
  * --------------------------------------------------------------------------- */
 
