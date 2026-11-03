@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "MachineMaker \u2014 desktop editor for hand-authoring RTL block diagrams.",
   "author": "Joshua H. Kirby",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
