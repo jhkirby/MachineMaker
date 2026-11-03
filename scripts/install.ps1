@@ -2,7 +2,7 @@
 # Project:       MachineMaker
 # Owner:         Joshua H. Kirby
 # Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
-# Last Modified: 2026-11-02
+# Last Modified: 2026-11-03
 # -----------------------------------------------------------------------------
 #
 # Installs or updates MachineMaker on Windows by building it from source.
@@ -18,9 +18,13 @@
 #
 # Installed data (%APPDATA%\MachineMaker, Documents\MachineMaker) is never
 # touched here, and is separate from a development checkout's data
-# (... "MachineMaker Dev") — see src/main/app-channel.ts.
+# (... "MachineMaker Dev") - see src/main/app-channel.ts.
 #
 # Environment overrides: MACHINEMAKER_REPO (git URL), MACHINEMAKER_BRANCH.
+#
+# Keep this file plain ASCII: Windows PowerShell 5.1 reads a BOM-less script
+# run with -File as Windows-1252, where a UTF-8 em dash decodes to a curly
+# quote that ends the string it's in and breaks parsing for the whole file.
 
 $ErrorActionPreference = "Stop"
 
@@ -52,7 +56,7 @@ function Invoke-Checked([scriptblock]$Command, [string]$What) {
 
 Assert-Command git "Install it from https://git-scm.com/download/win"
 Assert-Command node "Install Node.js $MinNodeMajor+ from https://nodejs.org"
-Assert-Command npm "It ships with Node.js — reinstall Node from https://nodejs.org"
+Assert-Command npm "It ships with Node.js - reinstall Node from https://nodejs.org"
 $NodeMajor = [int]((node --version).TrimStart("v").Split(".")[0])
 if ($NodeMajor -lt $MinNodeMajor) {
   throw "Node.js $MinNodeMajor+ is required (found $(node --version))."
@@ -61,7 +65,7 @@ if ($NodeMajor -lt $MinNodeMajor) {
 if (Test-Path (Join-Path $Source ".git")) {
   Write-Step "Updating source ($Branch)"
   Invoke-Checked { git -C $Source fetch --depth 1 origin $Branch } "git fetch"
-  # The checkout is build-only — never edited by hand — so discarding any
+  # The checkout is build-only - never edited by hand - so discarding any
   # local state is always safe and keeps updates from ever conflicting.
   Invoke-Checked { git -C $Source reset --hard "origin/$Branch" } "git reset"
   Invoke-Checked { git -C $Source clean -fdx -e node_modules } "git clean"
