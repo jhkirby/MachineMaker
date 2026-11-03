@@ -1,0 +1,2742 @@
+/* -----------------------------------------------------------------------------
+ * Project:       MachineMaker
+ * Owner:         Joshua H. Kirby
+ * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+ * Last Modified: 2026-11-02
+ * --------------------------------------------------------------------------- */
+
+@import "./tokens.css";
+
+/* ── RESET / BASE ─────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Static text (labels, headings, the palette, the inspector's read-only
+   cells) is chrome, not content — dragging across it shouldn't paint a text
+   selection. Only real text-entry controls opt back in, below. */
+body {
+  user-select: none;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--surface-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+/* No focus ring anywhere. Chromium's default one (orange in dark mode) is
+   left on a button after it's clicked and clashes with every theme, and
+   every control here already has its own hover/focus/active cue. !important
+   because library styles (React Flow nodes, edges, controls) set their own
+   :focus-visible outlines at higher specificity. */
+*:focus,
+*:focus-visible {
+  outline: none !important;
+}
+
+/* ── THEME TRANSITION ─────────────────────────────────────────────────────── */
+
+/* The theme toggle swaps themes inside a view transition (toggleTheme in
+   diagram-store.ts), so the browser cross-fades a snapshot of the old page
+   into the new one. This only sets how long that fade takes. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 300ms;
+  animation-timing-function: ease;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+}
+
+input,
+select {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-2);
+  width: 100%;
+}
+
+/* --block-stroke is only ever set inside a block inspector's own section
+   (InspectorPanel.tsx), so this falls back to plain --accent everywhere
+   else (the toolbar's title field, a wire's label, the palette) without
+   needing a separate rule for each. */
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--block-stroke, var(--accent));
+}
+
+/* Same color, just on hover — matches a port row's Side/Drive columns
+   (.dropdown__trigger:hover, below), which already do this: hovering
+   either kind of control in that row should read as the same "about to
+   edit this" cue, not have the two column types responding differently. */
+input:hover,
+select:hover {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+/* The dropdown popup's own selected/hovered row — same fallback as the
+   focus ring above. Chromium renders a <select>'s options as real
+   descendants of the page (just painted in a separate layer), so they
+   still inherit whatever --block-stroke the inspector section set. */
+select option:checked,
+select option:hover {
+  background: var(--block-stroke, var(--accent));
+  color: #fff;
+}
+
+/* Chromium's native number spinners can't be themed. Hidden everywhere;
+   the fields that want stepping draw their own (.stepper, below). */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* A number input flanked by the app's own − / + buttons (StepButtons,
+   InspectorPanel.tsx). Sized to its content: room for the widest value the
+   field accepts (--stepper-digits, set inline from the field's max) — not
+   stretched across the column. */
+.stepper {
+  display: inline-flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  align-self: flex-start;
+}
+
+.stepper input {
+  width: calc(var(--stepper-digits, 2) * 1ch + var(--space-2) * 2 + 2px);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The buttons follow the input in the DOM (so Tab reaches the field first)
+   and are pulled to either side of it here. */
+.stepper__button--dec {
+  order: -1;
+}
+
+.stepper__button--inc {
+  order: 1;
+}
+
+.stepper__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.stepper__button:disabled {
+  opacity: 0.4;
+}
+
+/* Read-only value standing in for a stepper's input while it's locked —
+   the same footprint as the input, so locking never shifts the buttons. */
+.stepper__fixed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--stepper-digits, 2) * 1ch + var(--space-2) * 2 + 2px);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+/* Width and Height spread to the panel's full width, so Height's + button
+   lines up flush with the right edge of the Name field above. */
+.field--steppers {
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
+.stepper__button:hover:not(:disabled) {
+  color: #fff;
+  background: var(--block-stroke, var(--accent));
+  border-color: var(--block-stroke, var(--accent));
+}
+
+/* Flagged by NameInput / NumericField while the current text breaks the rules. */
+input.is-invalid,
+input.is-invalid:focus {
+  border-color: var(--danger);
+}
+
+/* ── SCROLLBAR ────────────────────────────────────────────────────────────── */
+
+/* Applied globally via the universal selector, so every scrollable region
+   in the app — the ports list, a dropdown panel, the palette, the
+   inspector, the toolbar's File/Export menus — gets the same slim,
+   theme-aware scrollbar instead of whatever chunky, non-theme-aware one
+   Windows would otherwise draw (arrow buttons at both ends, a thick fixed
+   grey thumb). `::-webkit-scrollbar` and friends are the only way to style
+   one in Chromium (the standard `scrollbar-color`/`scrollbar-width`
+   properties are Firefox-only), which is fine here — this app only ever
+   renders inside its own bundled Electron/Chromium, never another engine. */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* No up/down arrow buttons — a plain draggable thumb is this scrollbar's
+   whole affordance, the same minimal shape most modern apps use instead of
+   the OS default. */
+*::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
+}
+
+/* Three shades of grey, one per state (tokens.css) — dedicated scrollbar
+   tokens rather than reusing --border-strong/--hover-highlight/
+   --text-secondary: those sit only a couple of shades apart from each
+   other in dark mode, which left clicking the thumb reading as no
+   different from just hovering it. Each theme's own three steps run in the
+   direction that keeps the thumb visible against that theme's surfaces —
+   lighter at each step in dark mode, darker at each step in light mode
+   (see the tokens' own definitions). The transparent border +
+   background-clip pair insets the visible thumb a couple of px from the
+   track's edges — a scrollbar thumb has no `padding` to reach for instead. */
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── APP LAYOUT ───────────────────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app__body {
+  /* Each panel's track width lives in its own custom property so the palette
+     and inspector can collapse independently without a combinatorial rule for
+     every state pairing. Transitioning the shorthand animates both at once. */
+  --palette-col: var(--sidebar-width);
+  --inspector-col: 0px;
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--palette-col) 1fr var(--inspector-col);
+  min-height: 0;
+  overflow: hidden;
+  transition: grid-template-columns 220ms ease;
+}
+
+.app__body--palette-collapsed {
+  --palette-col: var(--sidebar-rail-width);
+}
+
+.app__body--inspector-open {
+  --inspector-col: var(--inspector-width);
+}
+
+/* ── TITLEBAR ─────────────────────────────────────────────────────────────── */
+
+/* Replaces the native OS chrome (WindowManager creates the BrowserWindow with
+   frame: false). The whole bar is a drag handle except the control buttons,
+   which opt back out — Electron reads -webkit-app-region straight off the
+   computed style, so no JS is needed to make dragging/double-click-to-maximize
+   work beyond the button clicks wired in TitleBar.tsx. */
+.titlebar {
+  height: var(--titlebar-height);
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  background: var(--surface-base);
+  border-bottom: 1px solid var(--border-subtle);
+  -webkit-app-region: drag;
+}
+
+.titlebar__drag-region {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Hidden until the pointer is over the bar. The hovered class comes from the
+   main process (WindowManager.watchTitlebarHover) because the drag region
+   never sees mouse events; :hover still covers the buttons themselves, which
+   are no-drag and do get them. Opacity (not display/visibility) so they
+   stay clickable and keep their space while fading. */
+.titlebar__controls {
+  flex-shrink: 0;
+  display: flex;
+  /* Buttons are the one part of the bar that must NOT drag the window. */
+  -webkit-app-region: no-drag;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.titlebar--hovered .titlebar__controls,
+.titlebar__controls:hover {
+  opacity: 1;
+}
+
+.titlebar__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.titlebar__button:hover {
+  background: var(--hover-highlight);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+
+.titlebar__button--close:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* ── STATUS BAR ───────────────────────────────────────────────────────────── */
+
+/* Read-only stats along the bottom (StatusBar.tsx): groups of label/value
+   pairs from the left edge, each group split from the next by a thin rule. */
+.status-bar {
+  height: var(--status-bar-height, 24px);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-1);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--surface-panel);
+  border-top: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.status-bar__group {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+}
+
+.status-bar__group + .status-bar__group {
+  border-left: 1px solid var(--border-subtle);
+}
+
+/* Baseline-aligned so the (mono) number sits on the same line as its
+   (UI-font) label instead of riding up on the taller font's box. */
+.status-bar__stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+/* The pass/fail readouts (StatusBar.tsx) — Valid Schematic and Simulation
+   Ready — pushed together to the far right of the bar. On a narrow window
+   the stat groups give way (they clip), never these. */
+.status-bar__indicators {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* One readout: green with a check when it passes, red with an X when not. */
+.status-bar__validity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  font-weight: 600;
+  cursor: default;
+}
+
+.status-bar__validity + .status-bar__validity {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.status-bar__validity.is-valid {
+  color: var(--success);
+}
+
+.status-bar__validity.is-invalid {
+  color: var(--danger);
+}
+
+/* Values in the mono font with fixed-width digits, so a count ticking up
+   or the cursor readout changing doesn't jiggle everything after it. */
+.status-bar__value {
+  font-family: var(--font-mono);
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* ── TOOLBAR ──────────────────────────────────────────────────────────────── */
+
+.toolbar {
+  height: var(--toolbar-height);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.toolbar__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Inline title box: reads as plain text until the pointer or focus lands on it,
+   so the toolbar stays calm but the field is still discoverably editable. */
+.toolbar__doc-input {
+  width: auto;
+  min-width: 12ch;
+  padding: 2px var(--space-1);
+  color: var(--text-secondary);
+  background: transparent;
+  border-color: transparent;
+}
+
+.toolbar__doc-input:hover {
+  border-color: var(--border-strong);
+}
+
+.toolbar__doc-input:focus {
+  color: var(--text-primary);
+  background: var(--surface-input);
+}
+
+.toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.toolbar__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-strong);
+  margin: 0 var(--space-1);
+}
+
+/* The Build / Simulate switch (EditorModeToggle.tsx): the inspector's
+   segmented .mode-toggle, sized down to sit in the toolbar row. Uses the
+   app accent, since it isn't tied to any one block's color. */
+/* Doubled class: the base .mode-toggle rule (display: flex) comes later in
+   this file at equal specificity and would otherwise win. */
+.mode-toggle.mode-toggle--toolbar {
+  --block-stroke: var(--accent);
+  /* A grid of equal 1fr columns in a shrink-to-fit box: each column takes
+     the width of the widest label, so both segments are the same size. */
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  height: 28px;
+  flex-shrink: 0;
+}
+
+/* Simulate while the schematic isn't simulation-ready: dimmed and inert,
+   but still hoverable so its tooltip can say what's missing. */
+.mode-toggle--toolbar .mode-toggle__option.is-unavailable {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mode-toggle--toolbar .mode-toggle__option.is-unavailable:hover {
+  background: var(--surface-raised);
+}
+
+.mode-toggle--toolbar .mode-toggle__option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-3);
+  font-size: 12px;
+}
+
+/* Round icon button — the day/night theme toggle and the undo/redo arrows,
+   sized to match the canvas's own zoom/fit/lock controls
+   (.react-flow__controls-button) so every "circular icon action" in the app
+   reads as one family. */
+.toolbar__icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text-primary);
+}
+
+.toolbar__icon-button:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
+/* ── BUTTON HOVER MOTION ──────────────────────────────────────────────────── */
+
+/* The toolbar's round icon buttons, its File/Import/Export triggers and the
+   palette's collapse toggle all fade their hover fill in and out instead of
+   snapping to it. */
+.toolbar__icon-button,
+.toolbar-menu__trigger,
+.palette__toggle {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+/* Each icon also moves on hover, picked per button (data-hover-fx in
+   Toolbar.tsx, ViewControls.tsx, ComponentPalette.tsx) to suggest what the
+   button does. The slight overshoot in the easing gives it a springy feel;
+   the same transition plays it back out on leave. */
+[data-hover-fx] svg {
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-hover-fx="nudge-left"]:hover:not(:disabled) svg {
+  transform: translateX(-2px);
+}
+
+[data-hover-fx="nudge-right"]:hover:not(:disabled) svg {
+  transform: translateX(2px);
+}
+
+[data-hover-fx="nudge-up"]:hover:not(:disabled) svg {
+  transform: translateY(-2px);
+}
+
+[data-hover-fx="spin-quarter"]:hover:not(:disabled) svg {
+  transform: rotate(90deg);
+}
+
+[data-hover-fx="spin-half"]:hover:not(:disabled) svg {
+  transform: rotate(180deg);
+}
+
+[data-hover-fx="stretch"]:hover:not(:disabled) svg {
+  transform: scaleX(1.3);
+}
+
+[data-hover-fx="expand"]:hover:not(:disabled) svg {
+  transform: scale(1.18);
+}
+
+[data-hover-fx="tilt"]:hover:not(:disabled) svg {
+  transform: rotate(45deg) scale(0.9);
+}
+
+[data-hover-fx="pulse"]:hover:not(:disabled) svg {
+  transform: scale(0.85);
+}
+
+/* Minimap toggle: the map icon drifts down-right, toward the corner of
+   the canvas the minimap lives in. */
+[data-hover-fx="peek"]:hover:not(:disabled) svg {
+  transform: translate(1.5px, 1.5px) scale(1.08);
+}
+
+/* The lock shakes rather than settling into a new pose — a keyframe run,
+   so it plays once per hover instead of holding. */
+[data-hover-fx="wiggle"]:hover:not(:disabled) svg {
+  animation: hover-wiggle 420ms ease;
+}
+
+@keyframes hover-wiggle {
+  20% {
+    transform: rotate(-12deg);
+  }
+  45% {
+    transform: rotate(10deg);
+  }
+  70% {
+    transform: rotate(-5deg);
+  }
+  100% {
+    transform: rotate(0);
+  }
+}
+
+/* A closed menu's chevron dips toward where the menu will open. An open
+   one is already flipped by an inline transform, which outranks this. */
+.toolbar-menu__trigger:hover:not(:disabled) .toolbar-menu__chevron {
+  transform: translateY(2px);
+}
+
+/* ── TOOLBAR MENU (File / Export dropdowns) ──────────────────────────────── */
+
+.toolbar-menu {
+  position: relative;
+}
+
+.toolbar-menu__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.toolbar-menu__trigger:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
+.toolbar-menu__chevron {
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.toolbar-menu__panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  width: max-content;
+  padding: var(--space-1);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+.toolbar-menu__item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+}
+
+.toolbar-menu__item:hover:not(:disabled) {
+  background: var(--hover-highlight);
+}
+
+/* ── COMPONENT PALETTE ────────────────────────────────────────────────────── */
+
+.palette {
+  background: var(--surface-panel);
+  border-right: 1px solid var(--border-subtle);
+  padding: var(--space-4);
+  overflow-y: auto;
+}
+
+.palette--collapsed {
+  padding: var(--space-2) 0;
+  overflow: hidden;
+}
+
+.palette__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+/* On the rail the toggle sits above the icon squares, matching their size,
+   with a rule underneath separating it from them. */
+.palette--collapsed .palette__header {
+  justify-content: center;
+  margin: 0 6px;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.palette--collapsed .palette__toggle {
+  width: 28px;
+  height: 28px;
+}
+
+.palette__heading,
+.inspector__heading {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.inspector__heading {
+  margin-bottom: var(--space-2);
+}
+
+/* Square icon button so the collapse control reads the same in both states.
+   Flex-centered rather than relying on the plain button's default text
+   layout, which left the «/» glyph sitting small and off-center in the
+   square instead of centered on both axes. */
+.palette__toggle {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  /* Same resting look as a .palette__item card below (border-subtle, not
+     the plain button rule's border-strong), so the collapse control reads
+     as one family with the rows it collapses rather than a generic button. */
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+}
+
+.palette__toggle:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
+.palette__toggle-icon {
+  display: block;
+}
+
+.palette__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The item sits slightly raised and lifts a touch on hover so it reads as
+   something you pick up and drag onto the canvas. */
+.palette__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  padding: var(--space-2) var(--space-3);
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+.palette__item:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+  transform: translateX(3px);
+}
+
+.palette__item:active {
+  transform: translateX(1px);
+}
+
+/* Collapsed to the rail: icon-only squares, still clickable, draggable,
+   and colored by their left border like the full rows. No hover nudge —
+   the rail has no room for it. */
+.palette--collapsed .palette__list {
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.palette--collapsed .palette__item {
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  gap: 0;
+}
+
+.palette--collapsed .palette__item:hover:not(:disabled),
+.palette--collapsed .palette__item--placing {
+  transform: none;
+}
+
+/* The item whose block is currently in place mode — held in the hovered
+   look so it's clear what's attached to the pointer and that clicking it
+   again backs out. */
+.palette__item--placing,
+.palette__item--placing:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--accent);
+  transform: translateX(3px);
+}
+
+.palette__icon-slot {
+  display: flex;
+  flex-shrink: 0;
+}
+
+/* ── CANVAS ───────────────────────────────────────────────────────────────── */
+
+.canvas {
+  position: relative;
+  min-width: 0;
+  background: var(--surface-canvas);
+}
+
+.canvas .react-flow__attribution {
+  display: none;
+}
+
+/* Orthogonal wires: mitre the grid corners and the hop arcs cleanly. */
+.canvas .react-flow__edge-path {
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* Lighter blue on hover so an unselected wire still responds to the pointer.
+   React Flow layers an invisible, wider hit-testing path over the visible one
+   for easier clicking, so a plain `:hover` on the visible path itself would
+   rarely fire — hovering anywhere in the edge's group does, since SVG
+   `:hover` propagates up from any descendant. `!important` is needed to beat
+   the inline `stroke` RtlWireEdge sets for the resting bus/normal color;
+   `:not(--selected)` keeps a selected wire's own highlight color (theme-aware
+   — see selectionColorFor in block-appearance.ts) unaffected by hover. */
+.react-flow__edge:hover .rtl-wire-path:not(.rtl-wire-path--selected) {
+  stroke: var(--accent-hover) !important;
+}
+
+/* React Flow draws its own dotted bounding box around whatever a rubber-band
+   drag just selected, on top of (and visually inconsistent with) our own
+   per-block ".rtl-block.is-selected" ring — DiagramCanvas relays that
+   selection into our store instead, so this box would just be a redundant,
+   differently-styled second outline. Stripped down to no visuals (rather
+   than hidden outright) so every selection method reads the same way while
+   this stays clickable — it's still what lets you drag the whole selection
+   by grabbing empty space between its blocks. The *live* drag rectangle
+   (.react-flow__selection, shown while the box is still being dragged out)
+   is untouched. */
+.canvas .react-flow__nodesselection-rect {
+  background: transparent;
+  border: none;
+}
+
+/* The live drag rectangle itself (.react-flow__selection, still being
+   dragged out) ships two different built-in colors — a blue one and a grey
+   one — switched by React Flow's own light/dark split (DiagramCanvas passes
+   our theme straight through as its colorMode), not by anything in this
+   file. Pinned to our own grey tokens instead (tokens.css), so it always
+   reads as "grey", each theme's own shade tuned for contrast against that
+   theme's canvas rather than one fixed value neither is designed for. */
+.canvas .react-flow__selection {
+  background: var(--selection-fill);
+  border: 1px dotted var(--selection-border);
+}
+
+/* ── CURSORS ──────────────────────────────────────────────────────────────── */
+
+/* The app's own grab/grabbing hands, replacing the OS ones on the canvas
+   and palette: rounded line art in the same stroke style as the toolbar
+   icons, a light line on a dark halo (swapped in light mode) so the hand
+   reads on top of any block color or grid. The hotspot is the palm's
+   centre (12 12). The keyword after each url is the fallback if the image
+   ever fails to load. */
+:root {
+  --cursor-grab: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='-1 -1 26 26' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0 M14 10V4a2 2 0 0 0-4 0v2 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15' stroke='%2314161b' stroke-width='4.5'/%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0 M14 10V4a2 2 0 0 0-4 0v2 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15' stroke='%23ffffff' stroke-width='1.9'/%3E%3C/svg%3E") 12 12, grab;
+  --cursor-grabbing: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='-1 -1 26 26' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-4 0v1.4 M14 10V8a2 2 0 0 0-4 0v2 M10 9.9V9a2 2 0 0 0-4 0v5 M6 14a2 2 0 0 0-4 0 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0' stroke='%2314161b' stroke-width='4.5'/%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-4 0v1.4 M14 10V8a2 2 0 0 0-4 0v2 M10 9.9V9a2 2 0 0 0-4 0v5 M6 14a2 2 0 0 0-4 0 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0' stroke='%23ffffff' stroke-width='1.9'/%3E%3C/svg%3E") 12 12, grabbing;
+}
+
+:root[data-theme="light"] {
+  --cursor-grab: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='-1 -1 26 26' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0 M14 10V4a2 2 0 0 0-4 0v2 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15' stroke='%23ffffff' stroke-width='4.5'/%3E%3Cpath d='M18 11V6a2 2 0 0 0-4 0 M14 10V4a2 2 0 0 0-4 0v2 M10 10.5V6a2 2 0 0 0-4 0v8 M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15' stroke='%231c1f26' stroke-width='1.9'/%3E%3C/svg%3E") 12 12, grab;
+  --cursor-grabbing: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='-1 -1 26 26' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-4 0v1.4 M14 10V8a2 2 0 0 0-4 0v2 M10 9.9V9a2 2 0 0 0-4 0v5 M6 14a2 2 0 0 0-4 0 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0' stroke='%23ffffff' stroke-width='4.5'/%3E%3Cpath d='M18 11.5V9a2 2 0 0 0-4 0v1.4 M14 10V8a2 2 0 0 0-4 0v2 M10 9.9V9a2 2 0 0 0-4 0v5 M6 14a2 2 0 0 0-4 0 M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0' stroke='%231c1f26' stroke-width='1.9'/%3E%3C/svg%3E") 12 12, grabbing;
+}
+
+/* Prefixed with .canvas to out-rank React Flow's own `cursor: grab`
+   rules (@xyflow/react style.css). */
+.canvas .react-flow__pane.draggable,
+.canvas .react-flow__node.draggable,
+.canvas .react-flow__nodesselection-rect,
+.palette__item {
+  cursor: var(--cursor-grab);
+}
+
+.canvas .react-flow__pane.dragging,
+.canvas .react-flow__node.draggable.dragging,
+.palette__item:active,
+.rtl-block:active {
+  cursor: var(--cursor-grabbing);
+}
+
+/* ── MINIMAP ──────────────────────────────────────────────────────────────── */
+
+.canvas .react-flow__minimap {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* ── DRAG PREVIEW ─────────────────────────────────────────────────────────── */
+
+/* Rendered by DiagramCanvas while a palette item is being dragged over it.
+   Position/size come from the component as inline styles (grid-snapped canvas
+   coordinates run through the current pan/zoom), so this only owns the look:
+   a stand-in for the block that would land there. */
+.drag-preview {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  border: 1.5px solid;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* In place mode the preview itself marks where the block will go, so the
+   pointer drops React Flow's grab/pointer cursors for a plain crosshair. */
+.canvas.canvas--placing .react-flow__pane,
+.canvas.canvas--placing .react-flow__node {
+  cursor: crosshair;
+}
+
+/* ── RTL BLOCK NODE ───────────────────────────────────────────────────────── */
+
+.rtl-block {
+  width: 100%;
+  height: 100%;
+  /* An inset box-shadow, not a real `border`: a real border insets this
+     element's padding box — the containing block every port Handle below
+     measures its `top`/`left`/`right` against — by the border width, pulling
+     each handle a couple of pixels off the exact grid point portPosition()
+     computes (visible as a short diagonal stub at the wire's very end). A
+     box-shadow paints an identical-looking ring without touching the box
+     model, so this box's padding box stays exactly block.width x
+     block.height and every handle lands precisely on the grid. */
+  --block-outline: inset 0 0 0 1.5px var(--block-stroke, currentColor);
+  box-shadow: var(--block-outline);
+  border-radius: 8px;
+  font-size: 12px;
+  position: relative;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+/* A gate draws its own real outline (GateSymbol, RtlBlockNode.tsx) instead
+   of this generic rounded rect — background comes from the SVG's own
+   `fill`, and --block-outline (the rect's border, above) would otherwise
+   still show as a second, wrong rectangular outline around the real
+   AND/OR/XOR silhouette. */
+.rtl-block.is-gate {
+  box-shadow: none;
+}
+
+/* A `filter: brightness()` on the block itself would promote its whole
+   subtree (including the text below) into a new compositing layer on
+   hover-enter/exit; text glyphs get rasterized slightly differently once
+   layered, which reads as the label "jumping" a pixel on hover. This
+   pseudo-element paints the same lighten/darken effect without ever
+   touching the text's layer, so nothing inside the block moves.
+   --block-hover-tint (tokens.css) flips direction per theme: white in dark
+   mode, black in light mode — a fixed white-only tint was barely visible
+   against light mode's already-pale block fills. */
+.rtl-block::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--block-hover-tint);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+/* Skipped while a port is the thing actually under the pointer (:has a
+   hovered .rtl-port descendant) — otherwise this and the port's own hover
+   fill (.rtl-port:hover above) would both be visible at once, since hovering
+   a port also satisfies :hover on every ancestor including this block. */
+.rtl-block:hover:not(:has(.rtl-port:hover))::before {
+  opacity: 0.12;
+}
+
+/* A gate draws its own shape-matched hover fill instead (GateSymbol's
+   .gate-symbol__hover-fill, below) — this generic rectangle would otherwise
+   spill past a gate's curved/D-shaped body, showing as a box around the
+   symbol rather than a lighten of it (see the AND/OR/XOR body path this
+   overlay would miss). */
+.rtl-block.is-gate::before {
+  content: none;
+}
+
+/* Same 0.12 lighten as every other block's ::before, opacity-toggled by the
+   same hover condition, but painted as a second copy of the gate's own body
+   path (GateSymbol.tsx) so it fills the exact silhouette instead of the
+   block's bounding box. */
+.gate-symbol__hover-fill {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.rtl-block:hover:not(:has(.rtl-port:hover)) .gate-symbol__hover-fill {
+  opacity: 0.12;
+}
+
+/* Selection ring — drawn as its own overlay pseudo-element, painted on top
+   of every child, rather than folded into the block's own box-shadow
+   (--block-outline) the way earlier revisions of this rule did. A
+   box-shadow on .rtl-block itself paints *underneath* its normal-flow
+   children (the port Handles, including the clk triangle — RtlBlockNode),
+   which is fine at the resting 1.5px width the triangle's own base is
+   calibrated to meet exactly, but thickening that same box-shadow for
+   selection left the extra width hidden behind the triangle instead of
+   reaching it, showing as a gap between the ring and the triangle's base.
+   ::after is generated after every real child, so it paints last (on top)
+   regardless — z-index pins that down explicitly rather than leaning on
+   default stacking order alone, in case a Handle's own inline transform
+   ever gives it a stacking context of its own. Uses --block-stroke (the
+   same property --block-outline itself reads) rather than the generic
+   --accent, so a selected block's ring reads as "this block's own border,
+   emphasized" instead of switching to an unrelated blue that clashes with
+   a custom-colored block. Inset and inset:0 like the base ring, so the
+   block's own padding box — what every port Handle measures its position
+   against — still never moves. */
+.rtl-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  /* Always present at a zero-width ring rather than generated only while
+     selected, so selecting/deselecting animates the ring's width instead of
+     popping it in — a pseudo-element that only exists in one state has
+     nothing to transition from. */
+  box-shadow: inset 0 0 0 0 var(--block-stroke, var(--accent));
+  pointer-events: none;
+  transition: box-shadow var(--selection-ring-duration) ease;
+}
+
+.rtl-block.is-selected::after {
+  box-shadow: inset 0 0 0 3px var(--block-stroke, var(--accent));
+}
+
+/* A gate shows its "selected" emphasis by thickening its own real outline
+   instead (GateSymbol's `selected` prop) — this rectangular ring would
+   otherwise draw right alongside that curved/D-shaped silhouette instead of
+   around it. */
+.rtl-block.is-gate::after {
+  content: none;
+}
+
+/* The gate's own selection ring (GateSymbol.tsx): always rendered, its
+   stroke width animated between 0 and the selected width so it slides in
+   the same way the rectangular ring above does. */
+.gate-symbol__selection-ring {
+  transition: stroke-width var(--selection-ring-duration) ease;
+}
+
+/* Purely decorative (GateSymbol.tsx) — never the click/drag target itself,
+   so the real .rtl-block div underneath still gets the pointer events. */
+.gate-symbol {
+  pointer-events: none;
+}
+
+/* Painted by DiagramCanvas directly over a block that's mid-drag somewhere it
+   can't be dropped (on top of, or too close to, another block) — a separate,
+   plain element rather than styling the real node, because React Flow freezes
+   a node's own props (besides position) for the duration of its drag; see
+   DRAGGING_Z_INDEX's comment in DiagramCanvas.tsx. Translucent so the block
+   underneath (its label, ports, selection ring) still reads through the tint. */
+.invalid-placement-overlay {
+  position: absolute;
+  border: 1.5px solid #e0655f;
+  border-radius: 8px;
+  background: rgba(224, 101, 95, 0.45);
+  pointer-events: none;
+}
+
+/* The click-to-connect wire-in-progress: an orthogonal line from the armed
+   port to the (grid-snapped) pointer, marching to read as still "live" and
+   not yet a committed wire. */
+.connect-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.connect-preview__path {
+  stroke-linecap: round;
+  stroke-dasharray: 6 4;
+  animation: connect-preview-dash 500ms linear infinite;
+}
+
+@keyframes connect-preview-dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+/* Absolutely positioned so the name/kind stay dead-centre on the block width,
+   never nudged by the port labels sitting inside the edges. */
+.rtl-block__header {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.rtl-block__title {
+  font-weight: 600;
+}
+
+.rtl-block__kind {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.rtl-port {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--surface-canvas);
+  border: 1.5px solid var(--text-secondary);
+  /* Click-to-connect (RtlBlockNode) drives every port through our own
+     onClick, not React Flow's native drag-connect gesture — which is turned
+     off per-handle via isConnectableStart/End. React Flow ties a handle's
+     pointer-events to CSS classes keyed off those same flags, so grant
+     pointer-events here directly instead of relying on its classes. */
+  pointer-events: all;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+/* Stacked above the selection ring (.rtl-block.is-selected::after, z-index
+   1) so a plain port's own circle — drawn on the grid point the ring
+   passes directly through — stays fully visible over it instead of getting
+   partly painted over. The clk triangle (.rtl-port--clock) is deliberately
+   excluded: unlike a plain port, its base is what that ring is *supposed*
+   to cover, to close the gap its own thicker selected width would
+   otherwise leave short of the triangle (see the ring's own comment). */
+.rtl-port:not(.rtl-port--clock) {
+  z-index: 2;
+}
+
+/* A tied-off port (RtlPort.tiedOff): a grey X inside the port's own
+   circle. Drawn as two diagonal gradient strokes on the port's background
+   rather than a positioned child, so it's centered by construction and the
+   circle's own border-radius clips each arm exactly at the inner ring.
+   The port is inert — nothing can connect to it — so it takes no pointer
+   events: no hover glow, and a click falls through to the block. */
+.rtl-port.rtl-port--tied {
+  --tie-stroke: 1.4px;
+  pointer-events: none;
+  border-color: var(--text-muted);
+  background:
+    linear-gradient(
+      45deg,
+      transparent calc(50% - var(--tie-stroke) / 2),
+      var(--text-muted) calc(50% - var(--tie-stroke) / 2),
+      var(--text-muted) calc(50% + var(--tie-stroke) / 2),
+      transparent calc(50% + var(--tie-stroke) / 2)
+    ),
+    linear-gradient(
+      -45deg,
+      transparent calc(50% - var(--tie-stroke) / 2),
+      var(--text-muted) calc(50% - var(--tie-stroke) / 2),
+      var(--text-muted) calc(50% + var(--tie-stroke) / 2),
+      transparent calc(50% + var(--tie-stroke) / 2)
+    ),
+    var(--surface-canvas);
+}
+
+/* A light fill on hover, same idea as the block-body lighten below but
+   scoped to just the port itself — see the .rtl-block:hover:not(:has(...))
+   rule, which turns the block's own lighten off while a port is the thing
+   actually under the pointer, so the two effects never both show at once.
+   --port-hover-fill (tokens.css) is plain --surface-hover in dark mode —
+   this app's original look, unchanged — but redefined to --hover-highlight
+   in light mode, where --surface-hover sits only a few shades from
+   --surface-canvas (the port's resting fill) and reads as barely-there. */
+.rtl-port:hover {
+  background: var(--port-hover-fill);
+  border-color: var(--block-stroke, var(--accent));
+}
+
+/* The port a click-to-connect gesture is currently armed on: a persistent
+   ring so it reads as "waiting for a second click", distinct from the
+   glow every compatible target gets below. No size change — the bubble
+   itself must stay put, glow only. Uses --block-stroke (this port's own
+   block's color — see RtlBlockNode.tsx) rather than the generic --accent,
+   so the ring reads as "this block's own port, highlighted" instead of an
+   unrelated blue that clashes with a custom-colored block; --block-stroke-
+   glow is the same color pre-blended to a translucent halo (computed in TS
+   — see withAlpha in block-appearance.ts — since CSS alone can't derive an
+   alpha variant of an arbitrary custom-property color). Both fall back to
+   the plain accent tokens for anything rendered without a block ancestor. */
+.rtl-port--armed {
+  border-color: var(--block-stroke, var(--accent));
+  box-shadow: 0 0 0 4px var(--block-stroke-glow, var(--accent-glow));
+}
+
+/* Every other port that could complete the armed connection (opposite
+   direction, same bit width — see resolvePortPairConnection). Glows as soon
+   as a port is armed, not just on hover: with several valid targets on
+   screen at once, a diagram author needs to see all of them at a glance,
+   not discover them one hover at a time. Each target glows in *its own*
+   block's color (same --block-stroke variable, just inherited from whatever
+   block this particular port belongs to), same as the armed port above. */
+.rtl-port--connectable {
+  border-color: var(--block-stroke, var(--accent));
+  box-shadow: 0 0 0 4px var(--block-stroke-glow, var(--accent-glow));
+}
+
+/* The negative case: a port that can't complete the armed connection at all
+   (wrong direction, or a bit width that doesn't match) — direct feedback
+   only once the pointer actually lands on it, rather than flagging every
+   invalid port red all at once, which would be most of the diagram on a
+   wide bus and read as an error state rather than plain non-applicability. */
+.rtl-port--incompatible:hover {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-glow);
+}
+
+/* The clock: an outlined edge-triggered triangle instead of a plain port dot,
+   so it doesn't read as just another signal. Its outline is drawn by a child
+   <svg> polygon (see RtlBlockNode) rather than a CSS `border`: this box's
+   clip-path used to be filled solid, but a `border` on a clipped box only
+   paints the rectangular box edges that happen to survive the clip — the
+   triangle's slanted sides aren't real box edges, so they'd render with no
+   stroke at all. An SVG stroke draws the actual triangle path instead.
+   `data-side` (set in RtlBlockNode) orients it so the tip always points into
+   the block. Its base sits flush against the block's own edge rather than
+   straddling it like a normal port dot does: React Flow's base
+   `.react-flow__handle-{side}` rule anchors one edge of the handle box
+   exactly on portPosition()'s grid point (`left:0`
+   for a left-side port, etc.) and centers the *box* on that point with a 50%
+   transform on both axes — dropping the cross-axis half of that transform
+   here (restating only the along-axis half, since `transform` isn't
+   additive across rules and the more specific rule below replaces it
+   outright) leaves the box's edge, not its center, sitting on the point, so
+   the whole shape extends inward from the border instead of crossing it.
+   The underlying handle's hit target is still centered on that exact point
+   as normal, so wiring and click-to-connect are unaffected. */
+.rtl-port--clock {
+  width: 15px;
+  height: 22px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  /* Same border color as every plain port's ring, --text-secondary — see
+     .rtl-port, which no longer varies it by direction either. Previously
+     read from --block-stroke (the block's own per-kind color), which made
+     the triangle look like part of the block's frame rather than one more
+     port alongside the plain circles. */
+  color: var(--text-secondary);
+}
+
+/* Overrides the generic .rtl-port:hover rectangle: the clock's hit box is
+   much bigger than its actual triangle, so that rectangle would visibly
+   spill outside the drawn shape. The triangle-shaped fill below (on the
+   glyph's own polygon) replaces it instead. The border-color equivalent —
+   color, here, since the triangle's outline is an SVG stroke using
+   currentColor (see RtlBlockNode) rather than a real CSS border — still
+   applies, same as a plain port's ring turning accent-colored on hover. */
+.rtl-port--clock:hover {
+  background: transparent;
+  color: var(--block-stroke, var(--accent));
+}
+
+/* The connectable/incompatible glow (above) is a box-shadow ring, but the
+   clock's own hit box is clip-path'd down to the triangle's silhouette (see
+   the handle's inline clipPath, RtlBlockNode) — a box-shadow, which paints
+   outside that box, is clipped away with it and never reads. `color` is
+   this shape's real equivalent, same as it already is for the plain
+   .rtl-port--clock:hover rule above; these two win over it on specificity
+   (two classes vs. one) so the state that's actually true right now applies
+   regardless of source order. */
+.rtl-port--clock.rtl-port--connectable {
+  color: var(--block-stroke, var(--accent));
+}
+
+.rtl-port--clock.rtl-port--incompatible:hover {
+  color: var(--danger);
+}
+
+.rtl-port--clock[data-side="left"] {
+  transform: translateY(-50%);
+}
+
+.rtl-port--clock[data-side="right"] {
+  transform: translateY(-50%);
+}
+
+.rtl-port--clock[data-side="top"] {
+  width: 22px;
+  height: 15px;
+  transform: translateX(-50%);
+}
+
+.rtl-port--clock[data-side="bottom"] {
+  width: 22px;
+  height: 15px;
+  transform: translateX(-50%);
+}
+
+/* The triangle glyph itself, sized to exactly fill the handle box above so
+   its polygon coordinates (RtlBlockNode) can be authored in plain pixels. */
+.rtl-port--clock__glyph {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* Same light hover shade as a normal port (.rtl-port:hover), but shaped to
+   the triangle itself — a closed polygon sharing the outline's own points —
+   rather than the rectangular hit box, which is bigger than the drawn
+   triangle. Filled at rest with the same canvas color a plain port's own
+   circle sits on, so the triangle reads as solid/cut-out like every other
+   port instead of transparent to the block behind it; swaps to the same
+   hover fill a plain port uses (.rtl-port:hover, above) on interaction. */
+.rtl-port--clock__fill {
+  fill: var(--surface-canvas);
+  transition: fill 120ms ease;
+}
+
+.rtl-port--clock:hover .rtl-port--clock__fill {
+  fill: var(--port-hover-fill);
+}
+
+/* No transform here despite the layer-promotion trick this label actually
+   needs (see RtlBlockNode.tsx's portLayout, which sets it inline instead) —
+   this label's own positioning transform (translateX/Y(-50%)) is already
+   set inline per-port, and an inline style fully replaces a stylesheet's
+   `transform` for that element rather than combining with it, so a
+   `transform` declared only here would just be silently discarded. */
+/* A port's simulated value (Simulate mode), in a small tag just outside
+   the block beside its bubble — see valueTagLayout in RtlBlockNode.tsx.
+   Opaque so a wire running under it doesn't make it unreadable. */
+.rtl-port__value {
+  position: absolute;
+  z-index: 3;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--text-primary);
+  background: var(--surface-panel);
+  border: 1px solid var(--block-stroke, var(--border-strong));
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.rtl-port__value.is-unknown {
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+
+.rtl-port__label {
+  position: absolute;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-secondary);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Same color as the block's own border (--block-stroke, set per block —
+   its kind color, or a custom one, see resolvePalette) rather than the
+   generic --accent, so a bus width annotation reads as part of this
+   specific block's own styling instead of an unrelated blue that clashes
+   with a custom-colored block. */
+.rtl-port__label em {
+  color: var(--block-stroke, var(--accent));
+  font-style: normal;
+}
+
+.rtl-wire__label {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--surface-canvas);
+  padding: 1px 4px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* ── INSPECTOR ────────────────────────────────────────────────────────────── */
+
+.inspector {
+  /* Fixed at its full width regardless of the shrinking --inspector-col track:
+     as the track collapses toward 0, this box (anchored to the track's start
+     edge) is pushed past the app body's clipped right edge, reading as a
+     swipe off-screen rather than the content squeezing into nothing. */
+  background: var(--surface-panel);
+  border-left: 1px solid var(--border-subtle);
+  padding: var(--space-4);
+  overflow-y: auto;
+  width: var(--inspector-width);
+  min-width: var(--inspector-width);
+  justify-self: start;
+  visibility: hidden;
+  transition: visibility 0s linear 220ms;
+}
+
+/* Scrolls with the wheel but draws no scrollbar — the panel is narrow and
+   the bar only ever covered content. */
+.inspector {
+  scrollbar-width: none;
+}
+
+.inspector::-webkit-scrollbar {
+  display: none;
+}
+
+.inspector--open {
+  visibility: visible;
+  transition: visibility 0s linear 0s;
+}
+
+.inspector__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Shared by every block kind's "Ports" and "Color" subheadings (both are
+   plain <h3 className="inspector__subheading">, InspectorPanel.tsx) — a
+   divider styled here applies everywhere at once rather than needing a
+   separate rule per section. */
+.inspector__subheading {
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.inspector__muted,
+.inspector__stat {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field > span {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.field--row {
+  flex-direction: row;
+  gap: var(--space-2);
+}
+
+.field--check {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Wraps a NameInput that has a maxLength: the counter below is absolutely
+   positioned so showing/hiding it on focus/hover never shifts layout. */
+.name-input {
+  position: relative;
+  display: block;
+  /* Reserves room below the input for the counter overlay so it never
+     collides with the next field's label, whether or not it's visible. */
+  margin-bottom: var(--space-3);
+}
+
+.name-input__counter {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: var(--space-1);
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.name-input__counter.is-visible {
+  opacity: 1;
+}
+
+/* Two-state segmented control for a module's combinational/sequential mode
+   (see setModuleSequential in the diagram store). */
+.mode-toggle {
+  display: flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.mode-toggle__option {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: var(--surface-raised);
+  padding: var(--space-1) var(--space-2);
+}
+
+.mode-toggle__option:not(:first-child) {
+  border-left: 1px solid var(--border-strong);
+}
+
+/* Same grey a toolbar-menu trigger (the File/Export buttons) hovers to —
+   the option that isn't currently picked has no border of its own for the
+   generic button:hover:not(:disabled) rule (further up) to color, so
+   without this, hovering it gave no feedback at all. Excludes .is-active:
+   the active option already has its own resting fill (--block-stroke) and
+   its own hover rule right below, which this would otherwise outrank on
+   specificity and override. Also pins border-color back to --border-strong:
+   the second option's border-left is its only visible border edge (the rest
+   are `none` from the base rule above), and that generic button:hover rule
+   would otherwise still recolor it the unrelated plain --accent blue. */
+.mode-toggle__option:not(.is-active):hover {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
+/* --block-stroke here comes from an inline style on .mode-toggle itself
+   (InspectorPanel.tsx) — not inherited from a .rtl-block ancestor the way
+   the canvas's own port/selection styling reads it, since this panel sits
+   outside the canvas's DOM tree entirely. Falls back to --accent for safety
+   only; the inline style always sets it in practice. */
+.mode-toggle__option.is-active {
+  background: var(--block-stroke, var(--accent));
+  color: #fff;
+}
+
+.mode-toggle__option.is-active:hover {
+  border-color: var(--border-strong);
+}
+
+/* A toggle that can't change right now (a wired codec's Type — see
+   StructuredBlockSettings.tsx) stays readable, current choice and all, but
+   dims and stops reacting so it doesn't look like a control that's broken. */
+.mode-toggle.is-locked {
+  opacity: 0.55;
+}
+
+.mode-toggle__option:disabled {
+  cursor: not-allowed;
+}
+
+.mode-toggle.is-locked .mode-toggle__option:not(.is-active):hover {
+  background: var(--surface-raised);
+}
+
+/* A field whose contents sit centered in the panel (a codec's Size). The
+   stepper otherwise pins itself to the start (.stepper's align-self). */
+.field--centered {
+  align-items: center;
+  text-align: center;
+}
+
+.field--centered .stepper {
+  align-self: center;
+}
+
+/* Simulate mode's read-only inspector (SimulationInspector.tsx): plain
+   label/value facts and a port list — no controls. */
+.sim-inspector__fact {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 12px;
+}
+
+.sim-inspector__label {
+  color: var(--text-secondary);
+}
+
+.sim-inspector__value {
+  color: var(--text-primary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* One selected component (or wire): its facts, then its ports. Sections
+   are split by a rule; within one, nothing separates the facts from the
+   ports. */
+.sim-inspector__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sim-inspector__section + .sim-inspector__section {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* A component section's header: its name, large and in the component's
+   own color (set inline), with its kind beside it. */
+.sim-inspector__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.sim-inspector__name {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sim-inspector__kind {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.sim-inspector__ports {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sim-inspector__port {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 12px;
+}
+
+.sim-inspector__port-name {
+  color: var(--text-primary);
+}
+
+.sim-inspector__port-meta {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* ── SIGNAL PANEL ─────────────────────────────────────────────────────────── */
+
+/* The left panel in Simulate mode (SignalPanel.tsx). It still scrolls when
+   there are more inputs than fit, but draws no scrollbar. */
+.palette--simulating {
+  scrollbar-width: none;
+}
+
+.palette--simulating::-webkit-scrollbar {
+  display: none;
+}
+
+.signal-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.signal-panel__search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  color: var(--text-muted);
+  background: var(--surface-canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.signal-panel__search:focus-within {
+  border-color: var(--accent);
+}
+
+/* The wrapper draws the box; the input inside is bare. */
+.signal-panel__search-input,
+.signal-panel__search-input:focus {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+/* Clock and Reset side by side, the cycle count centred beneath them. */
+.signal-panel__clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.signal-panel__clock-buttons {
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.signal-panel__reset {
+  flex: 1;
+}
+
+.signal-panel__strobe {
+  flex: 1;
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.signal-panel__strobe:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.signal-panel__cycle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.signal-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.signal-panel__empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Name on the left (cut off with an ellipsis if long), value box right. */
+.signal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.signal-row__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.signal-row__width {
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* An output's value: read-only, in the same spot and font as an input's
+   value box, but plain text. "X" (unknown) is muted. */
+.signal-row__readout {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signal-row__readout.is-unknown {
+  color: var(--text-muted);
+}
+
+
+.signal-row__value {
+  min-width: 0;
+  padding: 2px var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+}
+
+/* Nothing on the canvas can be dragged or wired while simulating. */
+.canvas--simulating .rtl-port {
+  cursor: default;
+}
+
+/* Short explanation under a field that's locked, saying what unlocks it. */
+.field__note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Six-way segmented control for a gate's boolean function (setGateType in
+   the diagram store) — same look and interaction as .mode-toggle above, just
+   a 3-column grid wrapping to two rows instead of one flex row, since six
+   options in one row would run too narrow to read at this panel's width. */
+.gate-type-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.gate-type-toggle__option {
+  border: none;
+  border-radius: 0;
+  background: var(--surface-raised);
+  padding: var(--space-1) var(--space-2);
+  font-size: 12px;
+}
+
+/* Interior dividers: every column but the first gets a left border, every
+   row but the first a top border — the grid equivalent of .mode-toggle's
+   single row of left borders above. */
+.gate-type-toggle__option:not(:nth-child(3n + 1)) {
+  border-left: 1px solid var(--border-strong);
+}
+
+.gate-type-toggle__option:nth-child(n + 4) {
+  border-top: 1px solid var(--border-strong);
+}
+
+.gate-type-toggle__option:not(.is-active):hover {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
+.gate-type-toggle__option.is-active {
+  background: var(--block-stroke, var(--accent));
+  color: #fff;
+}
+
+.gate-type-toggle__option.is-active:hover {
+  border-color: var(--border-strong);
+}
+
+.field--check input {
+  width: auto;
+}
+
+/* ── LINK SECTION ─────────────────────────────────────────────────────────── */
+
+/* A module block's Link section (InspectorPanel.tsx), between Ports and
+   Color: a one-line status plus its action buttons. */
+.link-section__status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.link-section__name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.link-section__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.link-section__actions button {
+  flex: 1;
+}
+
+/* A linked module whose schematic file is gone (deleted, say). */
+.link-section__missing {
+  color: var(--danger);
+}
+
+/* ── PORT TABLE ───────────────────────────────────────────────────────────── */
+
+/* padding-right matches .port-list's own combined inset below (its
+   breathing-room padding plus its permanently-reserved scrollbar gutter) —
+   this header has no scrollbar of its own to reserve space for, but its
+   columns still need to land in the same spots as the scrollable rows
+   underneath, whether or not that scrollbar happens to be showing. */
+.port-list__header {
+  display: grid;
+  grid-template-columns: var(--port-columns);
+  gap: var(--space-1);
+  margin-bottom: 2px;
+  padding-right: calc(var(--port-list-inset) + var(--scrollbar-size));
+}
+
+/* The table runs on into most of the inspector's right padding, and the
+   tie-off/× buttons are slim, so the Name column — the one that matters
+   most — keeps a readable width even with both buttons on every row.
+   One column template for the header and the rows, varied per kind below. */
+.port-table {
+  --port-list-inset: 2px;
+  --port-columns: 1fr 64px 48px 44px 18px 18px;
+  margin-right: calc(-1 * var(--space-3));
+}
+
+/* A gate's or codec's ports are always exactly 1 bit (normalizeFixedPorts,
+   model/port-layout.ts), so its table drops the Width column rather than
+   showing "1" on every row the way clk/reset do on a module. */
+.port-table--no-width {
+  --port-columns: 1fr 64px 48px 18px 18px;
+}
+
+/* I/O pins and constants never offer a tie-off (canTieOff,
+   diagram-model.ts), so their table drops that slot too. */
+.port-table--no-tie {
+  --port-columns: 1fr 64px 48px 44px 18px;
+}
+
+.port-list__header span {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Caps at exactly 10 rows' worth of height (each row is 22px — see the
+   shared .port-row input/select/dropdown-trigger/fixed-value height rule
+   below — plus the 9 gaps between them) and scrolls internally past that,
+   rather than letting the whole inspector grow without bound for a block
+   with many ports. .port-list__header (the Name/Side/Drive/Width labels)
+   is this list's own sibling, not a child of it, so it's never part of the
+   scrolling region and stays put above it; the "+ Port" button below is
+   likewise a sibling of the whole .port-table, so it's already outside
+   this scroll region without needing anything further. */
+.port-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  padding-right: var(--port-list-inset);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: calc(22px * 10 + var(--space-2) * 9);
+  overflow-y: auto;
+  /* Reserves the scrollbar's own gutter unconditionally — without this, a
+     row count that crosses the 10-row cap makes the just-appeared
+     scrollbar eat into the row grid's own width, squeezing every column
+     (most visibly the gap before the × button) exactly when a diagram
+     author isn't touching anything that should be moving. The gutter
+     stays reserved (and empty) at 10 rows or fewer, so nothing ever shifts
+     when it crosses that line in either direction. */
+  scrollbar-gutter: stable;
+}
+
+.port-row {
+  display: grid;
+  grid-template-columns: var(--port-columns);
+  gap: var(--space-1);
+  align-items: center;
+}
+
+/* The tie-off toggle (TieOffButton, InspectorPanel.tsx): muted while the
+   port is in use, the block's own color once it's tied off. */
+.port-row__tie {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0;
+  color: var(--text-muted);
+  border-color: var(--border-subtle);
+}
+
+.port-row__tie.is-tied {
+  color: #fff;
+  background: var(--block-stroke, var(--accent));
+  border-color: var(--block-stroke, var(--accent));
+}
+
+.port-row__tie:hover:not(:disabled) {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+.port-row__tie:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* A plain text <input> and a native <select> never share a height at equal
+   padding — the select's own UA chrome (its dropdown arrow, mainly) forces
+   extra intrinsic height Chromium won't fully give up to CSS padding alone.
+   An explicit height plus border-box, applied to every control the row can
+   contain, is what actually pins them to one shared line instead. */
+.port-row input,
+.port-row select,
+.port-row .dropdown__trigger,
+.port-row__fixed-value {
+  box-sizing: border-box;
+  height: 22px;
+  padding: 2px 4px;
+  font-size: 11px;
+}
+
+/* Stands in for the side <select> on a module's pinned clock/reset port —
+   plain text instead of an interactive control that would just snap back.
+   Flex-centered rather than relying on line-height to vertically center the
+   text the way a real form control's own UA baseline handling does. */
+.port-row__fixed-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+/* Port and color values sit centred in their (narrow) boxes. */
+.port-row input {
+  text-align: center;
+}
+
+.port-row .dropdown__trigger {
+  justify-content: center;
+}
+
+.port-row__remove {
+  padding: 0;
+  height: 22px;
+  color: var(--danger);
+  border-color: var(--border-subtle);
+}
+
+/* Overrides the generic button:hover:not(:disabled) rule (RESET/BASE,
+   plain --accent) the same way every other control in a block's inspector
+   already does — see input:focus/.dropdown__trigger:hover/etc. — so this
+   still reads as "this block's own control" on hover, not an unrelated
+   blue. The × glyph itself stays --danger regardless; only the ring
+   changes. */
+.port-row__remove:hover:not(:disabled) {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+/* Plain button, no distinguishing look at rest — its own hover is what
+   needs to break from the generic button:hover:not(:disabled) rule (plain
+   --accent), same as every other control in a block's inspector already
+   does. */
+.port-table__add:hover:not(:disabled) {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+/* Direction tally under the + Port button (e.g. "3 in, 2 out") — the
+   block's own color, same as every other block-colored accent in this
+   panel (--block-stroke, set inline on .inspector__section above). */
+.port-table__summary {
+  margin: var(--space-1) 0 0;
+  font-size: 12px;
+  color: var(--block-stroke, var(--accent));
+}
+
+/* ── DROPDOWN ─────────────────────────────────────────────────────────────── */
+
+/* Stands in for a plain <select> (the port table's Side/Drive columns)
+   wherever the open option list itself needs real CSS control — on Windows,
+   Chromium paints a native <select>'s hovered row with the OS's own system
+   highlight color, which no stylesheet can override, so a list expected to
+   glow in a block's own custom color (--block-stroke) needs real DOM
+   elements to style instead of the browser's native popup. */
+.dropdown {
+  position: relative;
+}
+
+.dropdown__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  width: 100%;
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* Same color a focused text input's border takes (app.css, RESET/BASE) —
+   hover and open both read as "about to edit this", the same as a plain
+   input's own focus state, rather than the generic button hover rule
+   (button:hover:not(:disabled), further up) turning it the unrelated plain
+   --accent. That generic rule outranks a plain `:hover` here on
+   specificity alone (element + two pseudo-classes beats class + one), so
+   this needs the same `:not(:disabled)` padding to come out ahead — the
+   same fix already applied to .palette__item, .toolbar__icon-button, etc. */
+.dropdown__trigger:hover:not(:disabled),
+.dropdown__trigger[aria-expanded="true"] {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+.dropdown__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown__chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+/* position/top/left/min-width come from an inline style (Dropdown.tsx) —
+   the panel is portaled to <body> rather than laid out under .dropdown, so
+   a scrollable ancestor (e.g. the port table's own overflow-y: auto) can
+   never clip it the way an ordinary absolutely-positioned child would be. */
+.dropdown__panel {
+  z-index: 30;
+  width: max-content;
+  margin: 0;
+  padding: var(--space-1) 0;
+  list-style: none;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.dropdown__option {
+  padding: var(--space-1) var(--space-2);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* The actual current value: solid, full-strength block color, regardless of
+   whether the pointer happens to be over it too — this is the one row that
+   should never look provisional. */
+.dropdown__option.is-selected {
+  background: var(--block-stroke, var(--accent));
+  color: #fff;
+}
+
+/* Whichever row the pointer or an arrow key is currently on, when that
+   isn't also the selected row — a lighter, translucent tint of the same
+   color (--block-stroke-glow, the same token the canvas's own armed/
+   connectable port glow uses) rather than the selected row's solid fill,
+   so the two states stay visually distinct: "this is what's picked" vs.
+   "this is what you're about to pick". */
+.dropdown__option:hover:not(.is-selected),
+.dropdown__option.is-active:not(.is-selected) {
+  background: var(--block-stroke-glow, var(--hover-highlight));
+  color: var(--text-primary);
+}
+
+/* ── COLOR PICKER ─────────────────────────────────────────────────────────── */
+
+/* Closes off the Color section with the same divider .inspector__subheading
+   draws above "Ports" and "Color" themselves — this is the section's own
+   last element, so there's nothing after it to hang a border-top on. */
+.color-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.color-picker__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A plain round swatch button — deliberately not the app's usual button
+   look (no visible border/background of its own beyond the color itself)
+   so a whole row of these reads as color chips, not a toolbar. */
+.color-picker__swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+
+.color-picker__swatch:hover {
+  transform: scale(1.12);
+  border-color: transparent;
+}
+
+/* Two stacked shadows rather than one: the inner one repaints a ring of the
+   panel's own background color first, opening a visible gap between the
+   swatch and the outer ring — without it, the ring would butt straight
+   against the swatch's own (often similarly saturated) fill and the two
+   would blur into one indistinct edge. Grey (--text-secondary) rather than
+   --accent: this ring means "this is the picked swatch", not a themed
+   action, and a blue ring around e.g. a blue swatch read as it doubling
+   that swatch's own color rather than as a separate selection indicator. */
+.color-picker__swatch.is-selected {
+  box-shadow:
+    0 0 0 2px var(--surface-panel),
+    0 0 0 4px var(--text-secondary);
+}
+
+/* The "revert to this kind's default color" swatch: deliberately not a
+   solid color chip like the rest of the row (it isn't picking a color, it's
+   clearing one), so it's drawn as an empty ring instead — the same visual
+   vocabulary a "no fill" swatch uses in most design tools. */
+.color-picker__swatch--default {
+  background: var(--surface-raised);
+  border: 1.5px dashed var(--border-strong);
+}
+
+.color-picker__controls {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+/* A small caption over each of Hex / R / G / B, the same pattern .field
+   uses for the inspector's other labelled inputs. */
+.color-picker__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Looks like one input but is a wrapper: the "#" is a fixed label inside
+   the border and only the six digits are editable (ColorPicker.tsx). Sized
+   to its content (the input is exactly 6ch of monospace) rather than
+   stretching, so the box is never wider than a hex value needs. */
+.color-picker__hex {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 var(--space-2);
+  font-family: var(--font-mono);
+  background: var(--surface-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.color-picker__hex:hover,
+.color-picker__hex:focus-within {
+  border-color: var(--block-stroke, var(--accent));
+}
+
+.color-picker__hex.is-invalid {
+  border-color: var(--danger);
+}
+
+.color-picker__hex-prefix {
+  color: var(--text-muted);
+}
+
+/* The wrapper draws the border; the input itself is bare text. */
+.color-picker__hex input,
+.color-picker__hex input:hover,
+.color-picker__hex input:focus {
+  /* Exactly 6ch clipped the last digit (the input keeps a sliver of its
+     own text inset), so leave a little slack. */
+  width: 7.5ch;
+  padding: 0;
+  font-family: inherit;
+  text-align: center;
+  text-transform: lowercase;
+  background: transparent;
+  border: none;
+}
+
+.color-picker__channel {
+  width: 40px;
+  height: 26px;
+  padding: 0 2px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+/* Hue ring with the saturation/value square centred in its hole. Size and
+   ring thickness come from ColorPicker.tsx as inline styles, since the
+   component also needs them to turn pointer positions into colors. */
+.color-picker__wheel {
+  position: relative;
+  align-self: center;
+  touch-action: none;
+}
+
+/* Hue increases clockwise from red at the top — the same direction the
+   component's pointer math (atan2 from the top) assumes. The mask punches
+   out the middle so only a ring of the gradient is left. */
+.color-picker__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00
+  );
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--ring-width) - 0.5px),
+    #000 calc(100% - var(--ring-width))
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--ring-width) - 0.5px),
+    #000 calc(100% - var(--ring-width))
+  );
+  cursor: pointer;
+}
+
+/* The ring's drag handle: a hollow white circle with a faint dark edge so
+   it stays visible over light and dark colors. */
+.color-picker__thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ── TOOLTIP ──────────────────────────────────────────────────────────────── */
+
+/* Drawn by TooltipLayer.tsx in place of every native `title` tooltip,
+   which Chromium won't let CSS style. Positioned with inline left/top
+   (viewport coordinates); hidden until that position has been measured so
+   it never flashes in the corner first. */
+.tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: 280px;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  white-space: pre-line;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.tooltip--visible {
+  opacity: 1;
+}
+
+/* ── MODAL POPUP ──────────────────────────────────────────────────────────── */
+
+/* Full-window layer behind any popup (Modal.tsx). The blur is what reads as
+   "everything else is out of play"; the matching `inert` on #root is what
+   actually enforces it. Above the tooltip layer so a tooltip
+   left over from the click that opened the popup can't float over it.
+   `no-drag` carves the title bar's drag region out from under the backdrop
+   — Electron's app-region otherwise wins over anything stacked on top. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  -webkit-app-region: no-drag;
+  animation: modal-fade-in 120ms ease;
+}
+
+.modal {
+  position: relative;
+  width: min(360px, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* The popup's top-right corner: the × and any extra icon buttons a popup
+   adds (e.g. the list pickers' "browse the file system" folder), pinned
+   out of the centered column. */
+.modal__corner {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  gap: var(--space-1);
+}
+
+.modal__icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.modal__icon-button:hover {
+  color: var(--text-primary);
+  background: var(--hover-highlight);
+  border-color: transparent;
+}
+
+/* List popups (ListPickerDialog.tsx) need room for name, path and dates. */
+.modal--wide {
+  width: min(640px, calc(100vw - 2 * var(--space-4)));
+}
+
+.modal__title {
+  margin: 0;
+  /* Clear of the close button on both sides, so the centered title stays
+     truly centered rather than shifted by the button's width. */
+  padding: 0 var(--space-5);
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  /* A long component name wraps instead of stretching the popup. */
+  overflow-wrap: anywhere;
+}
+
+/* Optional line under a popup's title spelling out the consequence. */
+.modal__detail {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.modal__input {
+  text-align: center;
+}
+
+.modal__input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* The delete popup's type-DELETE field: letter-spaced monospace so the word
+   reads as a code to match, not free text, and red to match the action. */
+.modal__input--code {
+  letter-spacing: 0.2em;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.modal__input--code:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-glow);
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: center;
+}
+
+/* Two choices side by side — a way back and the action — e.g. the Link
+   Module popup's "Ports don't match" warning. */
+.modal__actions--spread {
+  gap: var(--space-3);
+}
+
+/* The way back: plain, so the action beside it is the one that stands out. */
+.modal__button.modal__button--quiet {
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+}
+
+.modal__button.modal__button--quiet:hover:not(:disabled) {
+  background: var(--hover-highlight);
+  border-color: var(--border-strong);
+}
+
+/* The popup's Confirm button wears the same red-outline look as the
+   inspector's Delete button (.inspector__delete) — one destructive style
+   app-wide. */
+.modal__button {
+  padding: var(--space-1) var(--space-5);
+  color: var(--danger);
+  background: var(--surface-raised);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  transition:
+    background-color 180ms ease,
+    opacity 180ms ease;
+}
+
+.modal__button:hover:not(:disabled) {
+  background: var(--danger-glow);
+  border-color: var(--danger);
+}
+
+.modal__button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* A non-destructive popup's submit (NamePromptDialog's Create): the same
+   outline shape in the accent color instead of red. */
+.modal__button--primary {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.modal__button--primary:hover:not(:disabled) {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+/* Same resting look as the inspector's segmented buttons (.mode-toggle__
+   option) — raised surface, rounded — but with red text and border to
+   mark it as the destructive one. Hover fades in a faint red wash. */
+.inspector__delete {
+  /* Half the panel, centered — a full-width red bar read as louder than a
+     destructive action that still asks for confirmation should be. */
+  width: 50%;
+  align-self: center;
+  margin-inline: auto;
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  color: var(--danger);
+  background: var(--surface-raised);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  transition: background-color 180ms ease;
+}
+
+.inspector__delete:hover:not(:disabled) {
+  background: var(--danger-glow);
+  border-color: var(--danger);
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── LIST PICKER POPUP ────────────────────────────────────────────────────── */
+
+/* A detail value marked as a pass or a fail (PickerItem.details' tone) —
+   e.g. the Link Module popup's "Ports Match" check or X. */
+.picker__detail-value.is-good {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.picker__detail-value.is-bad {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* ListPickerDialog.tsx: Open Project / Open Schematic. A search box over a
+   scrolling list; the highlighted row (hover or ↑/↓) is what Enter opens. */
+
+/* The corner carries two buttons (folder + ×); keep the centered title clear
+   of them on both sides so it stays truly centered. */
+.modal--wide .modal__title {
+  padding: 0 64px;
+}
+
+.picker__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.picker__search > svg {
+  position: absolute;
+  left: var(--space-3);
+  pointer-events: none;
+}
+
+.picker__search-input {
+  width: 100%;
+  padding-left: calc(var(--space-3) + 14px + var(--space-2));
+}
+
+.picker__search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(420px, 55vh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Name over path on the left, facts stacked on the right. */
+.picker__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name details"
+    "path details";
+  column-gap: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.picker__row.is-highlighted {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+.picker__name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.picker__badge {
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+}
+
+.picker__path {
+  grid-area: path;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.picker__details {
+  grid-area: details;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.picker__detail-label {
+  color: var(--text-muted);
+}
+
+.picker__empty {
+  margin: 0;
+  padding: var(--space-4) 0;
+  text-align: center;
+  color: var(--text-muted);
+}

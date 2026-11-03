@@ -1,0 +1,191 @@
+/* -----------------------------------------------------------------------------
+ * Project:       MachineMaker
+ * Owner:         Joshua H. Kirby
+ * Copyright:     Copyright (c) 2026 Joshua H. Kirby. All rights reserved.
+ * Last Modified: 2026-11-02
+ * --------------------------------------------------------------------------- */
+
+:root {
+  /* Surfaces — darkest (canvas) to lightest (raised panels). */
+  --surface-canvas: #14161b;
+  --surface-base: #1e1f22;
+  --surface-panel: #26282d;
+  --surface-raised: #303339;
+  --surface-hover: #3b3f47;
+  --surface-input: #191b1f;
+
+  /* Lines and text. */
+  --border-subtle: #34373d;
+  --border-strong: #454951;
+  --text-primary: #e8ecf4;
+  --text-secondary: #a7adba;
+  --text-muted: #767c88;
+
+  /* Accents. */
+  --accent: #4c9ffe;
+  --accent-hover: #6fb2ff;
+  --danger: #e0655f;
+  --success: #4ade80;
+
+  /* How long a block's selection ring takes to grow in/shrink out — shared
+     by the rectangular ring (.rtl-block::after) and a gate's own
+     silhouette-shaped ring (.gate-symbol__selection-ring) so both feel the
+     same. Theme-independent, so it lives only here. */
+  --selection-ring-duration: 140ms;
+
+  /* The soft halo behind an armed/connectable/incompatible port ring (see
+     .rtl-port--armed etc. in app.css) — kept as its own token, at a fixed
+     alpha, rather than computed from --accent/--danger at render time (plain
+     CSS has no color-mix() fallback old enough to rely on here), so it can
+     still track each theme's own accent/danger hue instead of the one
+     hardcoded rgb() a straight copy-paste would freeze in regardless of
+     theme. Must be kept in the same rgb() as --accent/--danger above. */
+  --accent-glow: rgba(76, 159, 254, 0.35);
+  --danger-glow: rgba(224, 101, 95, 0.35);
+
+  /* The scrollbar thumb's own three-step ramp (app.css, SCROLLBAR) — its
+     own dedicated tokens rather than reusing --hover-highlight/
+     --text-secondary for the hover/active steps: those two sit only a
+     couple of shades apart in this theme, which left a click reading as no
+     different from a hover. Each step here is deliberately spaced further
+     from its neighbors, and gets *lighter* going default → hover → active
+     to stay visible against this theme's dark surfaces. */
+  --scrollbar-thumb: #52565f;
+  --scrollbar-thumb-hover: #6e7480;
+  --scrollbar-thumb-active: #9aa0ab;
+
+  /* A flat mid grey for icon buttons, menu triggers, and palette cards to
+     highlight to on hover (unlike --surface-hover, which is a per-theme
+     elevation tint) so hover always reads as an unmistakable, deliberate
+     highlight rather than just a shade darker or lighter than whatever the
+     surface already was. Originally a much lighter grey (#a8aeb9) — against
+     this theme's near-black surfaces and near-white text/icons
+     (--text-primary), that read as a jarring flash that briefly drowned out
+     whatever label or icon it sat behind, rather than a hover cue. Still a
+     clear step up from --surface-hover, just nowhere near as bright. */
+  --hover-highlight: #565b64;
+
+  /* A port's (and clk triangle's) own hover fill — plain --surface-hover
+     here, same as this app's original look: against this theme's much
+     darker canvas, --surface-hover's shift off --surface-canvas already
+     reads clearly. Light mode redefines this to --hover-highlight instead
+     (below) rather than reusing --surface-hover there too, where the two
+     sit only a few shades apart and the hover was going unnoticed. */
+  --port-hover-fill: var(--surface-hover);
+
+  /* A block's own hover tint (.rtl-block::before, app.css) — plain white,
+     since every block's fill is a dark, near-black-blend color in this
+     theme (see resolvePalette in block-appearance.ts), so lightening it a
+     touch reads clearly. Light mode redefines this to black instead
+     (below): that same lighten direction, against a fill that's already a
+     pale tint close to white, was barely perceptible. */
+  --block-hover-tint: #fff;
+
+  /* React Flow's own rubber-band drag rectangle (.react-flow__selection,
+     app.css) ships a blue default and a grey default, switched by its own
+     light/dark split rather than anything here — pinned to a neutral grey
+     in both, via these two tokens, so it reads the same regardless of app
+     theme. This dark-mode grey is light against the dark canvas; light
+     mode needs a genuinely different (darker) grey for the same contrast
+     against its own light canvas, not just this value reused verbatim. */
+  --selection-fill: rgba(200, 200, 220, 0.08);
+  --selection-border: rgba(200, 200, 220, 0.8);
+
+  /* Home page (home.css): the deep backdrop gradient, the circuit traces
+     and their running light pulses, and the glow behind the logo. */
+  --home-backdrop-inner: #1b2440;
+  --home-backdrop-outer: #0d1018;
+  --home-trace: rgba(91, 141, 239, 0.22);
+  --home-pulse: #8fb4ff;
+  --home-glow: rgba(76, 159, 254, 0.45);
+  --home-card: rgba(30, 34, 44, 0.72);
+  --home-card-border: rgba(120, 150, 220, 0.22);
+  --home-title-from: #ffffff;
+  --home-title-to: #8fb4ff;
+
+  /* Spacing scale. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* Structure. */
+  --radius: 6px;
+  --scrollbar-size: 10px;
+  --titlebar-height: 32px;
+  --toolbar-height: 48px;
+  --sidebar-width: 232px;
+  --sidebar-rail-width: 40px;
+  --inspector-width: 300px;
+  --font-ui: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+
+/* Light theme — same token names as :root above, so every rule elsewhere
+   that already reads a surface, text, border, or accent token repaints for
+   free; only the handful of places with a color hardcoded outside these
+   tokens (see colorMode on the canvas's ReactFlow element, and its PNG and
+   minimap backgrounds) need their own theme-aware branch. Toggled by
+   setting data-theme="light" on the document root (see the toolbar's
+   day-night button, App.tsx). */
+:root[data-theme="light"] {
+  --surface-canvas: #e8eaef;
+  --surface-base: #eef0f4;
+  --surface-panel: #f8f9fb;
+  --surface-raised: #ffffff;
+  --surface-hover: #e3e6ed;
+  --surface-input: #ffffff;
+
+  --border-subtle: #dde1e8;
+  --border-strong: #c2c8d3;
+  --text-primary: #1d2129;
+  --text-secondary: #565e6c;
+  --text-muted: #7c8493;
+
+  --accent: #2f6fe0;
+  --accent-hover: #1f5bc4;
+  --danger: #c8433c;
+  --success: #15803d;
+
+  /* Matching rgb()s to this theme's own --accent/--danger above — see the
+     dark-mode definition's comment for why these can't just be computed
+     from them directly. */
+  --accent-glow: rgba(47, 111, 224, 0.35);
+  --danger-glow: rgba(200, 67, 60, 0.35);
+
+  /* Same three-step ramp as the dark-mode definition, mirrored: each step
+     gets *darker* going default → hover → active instead, to stay visible
+     against this theme's light surfaces. */
+  --scrollbar-thumb: #c5cad3;
+  --scrollbar-thumb-hover: #a8afba;
+  --scrollbar-thumb-active: #7d8492;
+
+  --hover-highlight: #cbd0d9;
+
+  /* --surface-hover sits only a few shades from --surface-canvas in this
+     theme, which read as barely-there on a port's small circle — this
+     theme's own --hover-highlight is the same unmistakable grey the
+     toolbar/palette already hover to, so it doubles as this instead. */
+  --port-hover-fill: var(--hover-highlight);
+
+  /* Darkens instead of lightens — this theme's block fills are already pale
+     tints close to white, so the dark-mode default (white, further up)
+     barely moved them. */
+  --block-hover-tint: #000;
+
+  /* A darker, more saturated grey than the dark-mode default above — against
+     this theme's light canvas, that lighter grey read as barely-there. */
+  --selection-fill: rgba(90, 90, 100, 0.14);
+  --selection-border: rgba(90, 90, 100, 0.75);
+
+  --home-backdrop-inner: #ffffff;
+  --home-backdrop-outer: #dfe5f1;
+  --home-trace: rgba(47, 111, 224, 0.2);
+  --home-pulse: #2f6fe0;
+  --home-glow: rgba(47, 111, 224, 0.3);
+  --home-card: rgba(255, 255, 255, 0.78);
+  --home-card-border: rgba(47, 111, 224, 0.2);
+  --home-title-from: #1d2129;
+  --home-title-to: #2f6fe0;
+}

@@ -1,0 +1,81 @@
+# Weekly software bill of materials. Generates a CycloneDX SBOM of every
+# package in the dependency tree (dev tooling included — a malicious build
+# tool runs on the machine that builds the app, so it matters as much as a
+# runtime one), keeps it as a run artifact, and scans it with OSV-Scanner.
+# The run fails if any package matches a known-malicious (MAL-) advisory from
+# the OpenSSF Malicious Packages dataset; GitHub emails the repo owner when a
+# scheduled run fails.
+name: SBOM
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC
+  workflow_dispatch:
+  push:
+    branches: [dev, qa, prod]
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/sbom.yml
+      - security/sbom/**
+
+permissions:
+  contents: read
+
+jobs:
+  sbom:
+    name: Generate and analyze SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      # --ignore-scripts: the point of this job is to find out whether a
+      # package is malicious, so none of their install scripts may run first.
+      - name: Install dependency tree (no scripts)
+        run: npm ci --ignore-scripts --no-fund --no-audit
+
+      - name: Generate CycloneDX SBOM
+        run: >
+          npx --yes @cyclonedx/cyclonedx-npm@6.0.1
+          --output-format JSON
+          --output-file sbom.cdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-${{ github.run_number }}
+          path: sbom.cdx.json
+          retention-days: 90
+
+      # Scans every component in the SBOM against OSV.dev, which aggregates
+      # GitHub advisories, npm advisories and the OpenSSF malicious-packages
+      # feed. Exits non-zero on *any* advisory, so the verdict is left to the
+      # next step, which only fails on malicious ones.
+      - name: Scan SBOM with OSV-Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --format=json
+            --output=osv-results.json
+            -L
+            sbom.cdx.json
+
+      - name: Fail on malicious packages
+        run: python3 security/sbom/check_malicious.py osv-results.json --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: osv-results-${{ github.run_number }}
+          path: osv-results.json
+          if-no-files-found: warn
+          retention-days: 90
